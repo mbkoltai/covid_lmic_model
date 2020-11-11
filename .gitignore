@@ -1,0 +1,10 @@
+# gitignore
+*.pdf
+*.docx
+*.png
+*.xlsx
+covid_eco_analysis/
+covid_lmic_v2/
+SDN/
+covid-deaths-region.csv
+

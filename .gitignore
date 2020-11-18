@@ -2,6 +2,7 @@
 *.pdf
 *.docx
 *.png
+*.odt
 *.xlsx
 covid_eco_analysis/
 covid_lmic_v2/

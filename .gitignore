@@ -7,6 +7,7 @@
 .odt#
 *.xlsx
 *.tar.gz
+sandbox.R
 covidm/
 covid_eco_analysis/
 covid_lmic_v2/

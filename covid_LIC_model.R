@@ -178,9 +178,9 @@ mean_g=7; shape_g=8; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g)
 # Duration of severe, critical disease in days ~ Gamma(μ = 10, k = 10)
 # Delay from symptom onset to death in days ~ Gamma(μ=22,k=22)
 
-lmic_symptom_fract=c(rep(0.2973718, 2), rep(0.2230287, 2), rep(0.4191036, 2), rep(0.4445867, 2), rep(0.5635720, 2), rep(0.8169443, 6) )
+lmic_symptom_fract=c(rep(0.2973718,2), rep(0.2230287,2), rep(0.4191036,2), rep(0.4445867,2), rep(0.5635720,2), rep(0.8169443,6))
 # library(data.table)
-age_groups <- data.table( age_group = c(1:16),   age_low = c( seq(0, 75, 5) ),   age_high = c( seq(4, 74, 5), 100) )
+age_groups <- data.table(age_group=c(1:16), age_low=c(seq(0,75,5) ), age_high=c( seq(4, 74, 5), 100) )
 covid_parameters <- list( "clinical_fraction" = list( values = list( "age_y" = 19, "age_m" = 50, "age_o" = 68,
       "symp_y" = 0.037, "symp_m" = 0.3, "symp_o" = 0.65 )  ) )
 #' calculate probability of clinical disease by age group

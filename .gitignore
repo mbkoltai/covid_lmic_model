@@ -1,8 +1,10 @@
 # gitignore
 *.pdf
 *.docx
+.docx#
 *.png
 *.odt
+.odt#
 *.xlsx
 *.tar.gz
 covidm/

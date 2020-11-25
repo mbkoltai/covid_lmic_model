@@ -71,7 +71,12 @@ list(df_ode_solution,df_ode_solution_tidy)
 }
 
 ### set init conds
-ind_inf_initvals=fun_sub2ind_seir_agestr(j_age=1:2,varname="E",varname_list=vartype_list,n_var=length(vartype_list),n_age=n_age)
-initvals_seir_model=matrix(0,dim_sys,1); initvals_seir_model[ind_all_susceptibles]=N_tot
-inf_initval=10; initvals_seir_model[ind_inf_initvals]=inf_initval; initvals_m=matrix(initvals_seir_model,ncol=n_age)
+fcn_set_init_conds<-function(inf_initval,init_inf_age_groups,init_inf_vartype,n_age,N_tot,vartype_list,ind_all_susceptibles){
+ind_inf_initvals=fun_sub2ind_seir_agestr(j_age=init_inf_age_groups,varname=init_inf_vartype,
+                                         varname_list=vartype_list,n_var=length(vartype_list),n_age=n_age)
+initvals_seir_model=matrix(0,length(vartype_list)*n_age,1); initvals_seir_model[ind_all_susceptibles]=N_tot
+# inf_initval=10; 
+initvals_seir_model[ind_inf_initvals]=inf_initval; initvals_m=matrix(initvals_seir_model,ncol=n_age)
 initvals_seir_model[ind_all_susceptibles]=initvals_seir_model[ind_all_susceptibles]-colSums(initvals_m[2:nrow(initvals_m),])
+initvals_seir_model
+}

@@ -35,15 +35,11 @@ list_bm_am=fun_force_inf_vects(vartype_list,forceinf_vars,n_age,f_val); b_m_full
 # contact matrix
 C_m=matrix(1,n_age,n_age)
 # inf vector is: b_m_full %*% diag(c(1,2)) %*% C_m %*% diag(u_val) %*% a_m %*% matrix(1,8,1)
-ind_all_inf_vars=fun_inds_vartypes(n_age,vartype_list,infect_vartype)[[1]]
-ind_all_susceptibles=fun_inds_vartypes(n_age,vartype_list,infect_vartype)[[2]]
-
-# INITIAL CONDITIONS (full_varname_list=fun_seir_agestr_varnames(vartype_list,n_age))
+l=fun_inds_vartypes(n_age,vartype_list,infect_vartype); ind_all_inf_vars=l[[1]]; ind_all_susceptibles=l[[2]]
+# INITIAL CONDITIONS
 # seed epidemic by "E">0 in a given (or multiple) age groups
-ind_inf_initvals=fun_sub2ind_seir_agestr(j_age=1:2,varname="E",varname_list=vartype_list,n_var=length(vartype_list),n_age=n_age)
-initvals_seir_model=matrix(0,dim_sys,1); initvals_seir_model[ind_all_susceptibles]=N_tot
-inf_initval=10; initvals_seir_model[ind_inf_initvals]=inf_initval; initvals_m=matrix(initvals_seir_model,ncol=n_age)
-initvals_seir_model[ind_all_susceptibles]=initvals_seir_model[ind_all_susceptibles]-colSums(initvals_m[2:nrow(initvals_m),])
+initvals_seir_model=fcn_set_init_conds(inf_initval=10,init_inf_age_groups=1:2,init_inf_vartype="E",
+                                       n_age,N_tot,vartype_list,ind_all_susceptibles)
 
 ### run ODEs ----------------------------
 # time resolution and duration

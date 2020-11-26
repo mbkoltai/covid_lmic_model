@@ -2,9 +2,9 @@
 
 # to render as html: rmarkdown::render("RSV_kenya_SA_calculation.R",output_dir='output/cea_plots/')
 # library(tidyverse); library(reshape2); library(matrixStats); library(rstudioapi); # library(fitdistrplus)
-library(tidyverse); library(qs); library(wpp2019); library(countrycode); library(deSolve)
 currentdir_path=dirname(rstudioapi::getSourceEditorContext()$path); setwd(currentdir_path)
-# plotting theme
+library(tidyverse); library(qs); library(wpp2019); library(countrycode); library(deSolve)
+# functions and plotting theme
 source("covid_LIC_fcns.R")
 ### ### ### ### ### ### ### ### ### ### ### ###
 ### SEIR age structured (covidm) --------------------------
@@ -14,31 +14,42 @@ seir_agestr_ode <- function(t,X,parms){ # params=list(K_m,C_m,b_m_full,u_val,a_m
   K_m=parms[[1]];C_m=parms[[2]];b_m_full=parms[[3]]; u_val=parms[[4]];a_m=parms[[5]]; 
   susc_ind=parms[[6]]; inf_vars_inds=parms[[7]]
   dXdt=b_m_full %*% diag(X[susc_ind]) %*% C_m %*% diag(u_val) %*% a_m %*% X[inf_vars_inds] + K_m%*%X; list(dXdt) }
-
-n_age=5; vartype_list=c('S','E','Ip','Ic','Is'); dim_sys=n_age*length(vartype_list)
-infect_vartype=c('E','Ip','Ic','Is')
+# SYSTEM DIMENSIONS
+n_age=16; vartype_list=c('S','E','Ip','Ic','Is'); infect_vartype=c('E','Ip','Ic','Is'); dim_sys=n_age*length(vartype_list)
 # full list of vars
 full_varname_list=fun_seir_agestr_varnames(vartype_list,n_age)
-# convert name & age index into linear index: fun_sub2ind_seir_agestr(j_age=2,varname='Is',vartype_list,length(vartype_list),n_age=2)
-# total popul
-N_tot=rep(1e6,n_age)
-# params that could be age-dependent
-u_val=rep(0.25,n_age)/N_tot; y_val=0.2+(1:n_age)*0.1; f_val=rep(0.5,n_age)
+# convert name+age index to linear index: fun_sub2ind_seir_agestr(j_age=2,varname='Is',vartype_list,length(vartype_list),n_age=2)
+# TOTAL POPULATION
+# age struct in covidm
+age_groups <- data.table(age_group=c(1:16), age_low=c(seq(0,75,5) ), age_high=c(seq(4,74,5),100))
+# population data from wpp2019
+i_cntr="Sudan";cntr_agestr=data.frame(agegroups=popF[popF$name %in% i_cntr,"age"],values=popF[popF$name %in% i_cntr,"2020"] +
+                                        popM[popM$name %in% i_cntr,"2020"])
+agegr_truthvals=sapply(strsplit(as.character(cntr_agestr$agegroups),"-"),"[[",1) %in% age_groups$age_low
+N_tot=cntr_agestr$values[agegr_truthvals];N_tot[length(N_tot)]=N_tot[length(N_tot)]+sum(cntr_agestr$values[!agegr_truthvals])
+# wpp2019 data is in thousands
+if(all(N_tot<1e6)) {N_tot=N_tot*1e3}
+# N_tot=rep(1e6,n_age)
+# age-dependent parameters
+u_val=rep(0.3,n_age)/N_tot; y_val=0.04+(1:n_age)*0.6/n_age; f_val=rep(0.5,n_age)
 # constant transmission parameters
-d_e=1; d_p=1; d_c=1; d_s=1; infect_first_ord_pars=c(d_e,d_p,d_c,d_s)
-# set up kinetic matrix
+d_e=4; d_p=1.5; d_c=3.5; d_s=5; infect_first_ord_pars=c(d_e,d_p,d_c,d_s)
+# KINETIC MATRIX (LINEAR TERMS)
 K_m=fun_seir_agestr_kinmatr(infect_vartype,vartype_list,n_age,infect_first_ord_pars,y_val)
-# infection terms
-forceinf_vars=c("S","E"); n_lin_terms=sum(!vartype_list %in% forceinf_vars)
-# vectors to scale force of infection terms
-list_bm_am=fun_force_inf_vects(vartype_list,forceinf_vars,n_age,f_val); b_m_full=list_bm_am[[1]]; a_m=list_bm_am[[2]]
-# contact matrix
-C_m=matrix(1,n_age,n_age)
+# vectors to scale FORCE of INFECTION terms
+list_bm_am=fun_force_inf_vects(vartype_list,forceinf_vars=c("S","E"),n_age,f_val); b_m_full=list_bm_am[[1]]; a_m=list_bm_am[[2]]
+# CONTACT MATRIX
+# call covidm for Ethiopia contact matrix
+if (!exists("covid_params")){cm_path="~/Desktop/research/models/epid_models/covid_model/lmic_model/covidm/"
+source(file.path(cm_path,"R","covidm.R"));cm_force_rebuild=F;cm_build_verbose=T;cm_version=2
+covid_params=cm_parameters_SEI3R("Ethiopia")}
+C_m_covidm=covid_params$pop[[1]]$matrices$home + covid_params$pop[[1]]$matrices$work + covid_params$pop[[1]]$matrices$school
+C_m=C_m_covidm # matrix(1,n_age,n_age)
 # inf vector is: b_m_full %*% diag(c(1,2)) %*% C_m %*% diag(u_val) %*% a_m %*% matrix(1,8,1)
 l=fun_inds_vartypes(n_age,vartype_list,infect_vartype); ind_all_inf_vars=l[[1]]; ind_all_susceptibles=l[[2]]
 # INITIAL CONDITIONS
 # seed epidemic by "E">0 in a given (or multiple) age groups
-initvals_seir_model=fcn_set_init_conds(inf_initval=10,init_inf_age_groups=1:2,init_inf_vartype="E",
+initvals_seir_model=fcn_set_init_conds(inf_initval=10,init_inf_age_groups=7,init_inf_vartype="E",
                                        n_age,N_tot,vartype_list,ind_all_susceptibles)
 
 ### run ODEs ----------------------------
@@ -50,16 +61,24 @@ params=list(K_m, C_m, b_m_full, u_val, a_m, ind_all_susceptibles, ind_all_inf_va
 ptm<-proc.time(); ode_solution<-lsoda(initvals_seir_model,timesteps,func=seir_agestr_ode,parms=params); proc.time() - ptm
 # PROCESS OUTPUT
 # df_ode_solution = ode_solution %>% as.data.frame() %>% setNames(c("t",full_varname_list))
-df_ode_solution=fcn_proc_ode_output(ode_solution,full_varname_list,ind_all_inf_vars)[[1]]
-df_ode_solution_tidy=fcn_proc_ode_output(ode_solution,full_varname_list,ind_all_inf_vars)[[2]]
+l_proc_sol=fcn_proc_ode_output(ode_solution,full_varname_list,ind_all_inf_vars)
+df_ode_solution=l_proc_sol[[1]]; df_ode_solution_tidy=l_proc_sol[[2]]
 
 # PLOT
-xval_breaks=seq(timesteps[1],timesteps[length(timesteps)],10); xlim_val=160
-ggplot(df_ode_solution_tidy, aes(x=t,y=value,group=variable,color=compartm)) + # ,linetype=vartype
-  geom_line(size=1.05) + # scale_linetype_manual("vars",values=c("dotdash","solid")) +
-  facet_wrap(~agegroup+vartype,scales='free_y',nrow=n_age) + theme_bw() + standard_theme + labs(linetype='vars',color='vars') + #
-  scale_x_continuous(breaks=xval_breaks,limits=c(0,xlim_val)) + # ,minor_breaks=; seq(timesteps[1],timesteps[length(timesteps)],10)
+xval_breaks=seq(timesteps[1],timesteps[length(timesteps)],10); xlim_val=150; standard_theme$axis.text.y$size=6
+df_age_groups=df_ode_solution_tidy %>% group_by(agegroup,vartype) %>% 
+  summarise(max_val=max(value),min_val=min(value),opt_val=(max(value)+min(value))/2)
+ggplot(df_ode_solution_tidy,aes(x=t,y=value,group=variable,color=compartm)) + geom_line(size=1.05) + 
+  facet_wrap(~agegroup+vartype,scales='free_y',ncol=4) + 
+  geom_text(data=df_age_groups,aes(x=7,y=opt_val,label=paste("age:",agegroup),group=NULL),size=3,color="black") +
+  theme_bw() + standard_theme + theme(strip.background=element_blank(),strip.text=element_blank()) + 
+  labs(linetype='vars',color='vars') + scale_x_continuous(breaks=xval_breaks,limits=c(0,xlim_val)) + 
   xlab('days') + ylab('') + ggtitle(paste0(paste0(vartype_list,collapse="-"),'-R simulation'))
+# SAVE
+ggsave(paste0("plots/SEIR_age_str_",n_age,"agegroups.png"),width=30,height=20,units="cm")
+# ,minor_breaks=; seq(timesteps[1],timesteps[length(timesteps)],10)
+# facet_grid(agegroup~vartype,rows=vars(agegroup),cols=vars(vartype),scales="free") + # 
+# scale_linetype_manual("vars",values=c("dotdash","solid")) + # data=data.frame(agegroup=age_range),
 
 # infected fraction of popul (HIT)
 1 - round(df_ode_solution[nrow(df_ode_solution),grepl('S_',colnames(df_ode_solution))]/N_tot,2)
@@ -67,17 +86,14 @@ ggplot(df_ode_solution_tidy, aes(x=t,y=value,group=variable,color=compartm)) + #
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### algebraic solution
 
-
-
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### SEIR with 1 age group ----------------------------
 # for one age group: set initconds for other age groups to 0
 # R0=N_tot*u_val*(y_val*((1/d_c + 1/d_p) - f_val/d_s) + f_val/d_s)
 # N_tot*u_val*(y_val*(1/d_c - f_val/d_S) + f_val/d_S)
 # INITCOND
-ind_inf_initvals=fun_sub2ind_seir_agestr(j_age=1,varname="E",varname_list=vartype_list,n_var=length(vartype_list),n_age=n_age)
-inf_initval=10; S0_val=N_tot[1]-inf_initval; initvals_seir_model=matrix(0,dim_sys,1); initvals_seir_model[ind_inf_initvals]=inf_initval
-initvals_seir_model[ind_all_susceptibles[1]]=S0_val
+inf_initval=10; initvals_seir_model=fcn_set_init_conds(inf_initval,init_inf_age_groups=1,init_inf_vartype="E",n_age,N_tot,
+                                       vartype_list,ind_all_susceptibles)
 # RUN
 ptm<-proc.time(); ode_solution<-lsoda(initvals_seir_model,timesteps,func=seir_agestr_ode,parms=params); proc.time() - ptm
 # PROCESS OUTPUT
@@ -139,26 +155,6 @@ ggsave(paste0("plots/",paste0(varname_list,collapse=""),"_analyt_sol_facetcontag
 # ggplot(R0_scan,aes(x=S_ss,y=value,group=R0,color=R0)) + geom_line() + geom_hline(yintercept=0,color='red',linetype='dashed') + 
 #   theme_bw() + standard_theme
 
-# from sympy (in python)
-# dominant eigenvalue (2-age group SEIR model):
-# (beta11*gamma2 + beta22*gamma1)/(2*gamma1*gamma2) + sqrt(beta11**2*gamma2**2 - 2*beta11*beta22*gamma1*gamma2 + 
-# 4*beta12*beta21*gamma1*gamma2 + beta22**2*gamma1**2)/(2*gamma1*gamma2)
-
-#### loglikelihood with negbinom and dirichlet distribs ---------------
-# loglikelihood ~ prod_k(negbinom(incid_obs_day_k,pred_obs_day_k))*prod_m(dirmultinomial(obs_age_distrib,pred_age_distrib))
-# num_k=1e3; sse_lglkl=matrix(NA,nrow=num_k,ncol=3)
-# for (k in 1:num_k) { n_days=44; incid_pred=round(exp((0:n_days)/5.25)); 
-# errorscale=round(incid_pred*0.001); errorscale[errorscale<1]=1; errorsvals=errorscale*floor(runif(n_days+1,min=-10,max=10))
-# incid_obs=incid_pred+errorsvals; incid_obs[incid_obs<0]=0; mean_sse=mean((incid_obs-incid_pred)^2)
-# mean_perc_err=mean(abs((incid_pred- incid_obs)/incid_pred))
-# true_age_distrib=matrix(rep(c(1,20,50,30)/1e2,n_days),nrow=n_days,byrow=T)
-# pred_age_distrib=matrix(rep(c(1,20,45,35)/1e2,n_days),nrow=n_days,byrow=T)
-# # install.packages("extraDistr") # library("extraDistr")
-# binm_probs=dnbinom(x=incid_obs,size=200,mu=incid_pred)
-# dirichlet_probs=sapply(1:nrow(true_age_distrib),function(x) {ddirichlet(x=true_age_distrib[x,],alpha=pred_age_distrib[x,])})
-# sse_lglkl[k,]=c(mean_perc_err,mean_sse,log10(prod(binm_probs)*prod(dirichlet_probs)))
-# }
-
 ### covidm parameters ------------------------------------------------------------------
 sample_size=1e4
 # d_e (pre-infectious days)
@@ -181,52 +177,24 @@ mean_g=7; shape_g=8; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g)
 lmic_symptom_fract=c(rep(0.2973718,2), rep(0.2230287,2), rep(0.4191036,2), rep(0.4445867,2), rep(0.5635720,2), rep(0.8169443,6))
 # library(data.table)
 age_groups <- data.table(age_group=c(1:16), age_low=c(seq(0,75,5) ), age_high=c( seq(4, 74, 5), 100) )
-covid_parameters <- list( "clinical_fraction" = list( values = list( "age_y" = 19, "age_m" = 50, "age_o" = 68,
-      "symp_y" = 0.037, "symp_m" = 0.3, "symp_o" = 0.65 )  ) )
+covid_parameters<-list("clinical_fraction"=list(values=list("age_y"=19,"age_m"=50,"age_o"=68,
+                                                            "symp_y"=0.037,"symp_m"=0.3,"symp_o"=0.65)) )
 #' calculate probability of clinical disease by age group
 #' following posterior estimates by Davies et al
 getClinicalFraction <- function(age_groups){
   #' smoothly interpolate between points (x0, y0) and (x1, y1) using cosine interpolation.
   #' for x < x0, returns y0; for x > x1, returns y1; for x0 < x < x1, returns the cosine interpolation between y0 and y1
   interpolate_cos = function(x, x0, y0, x1, y1)
-  {
-    ifelse(x < x0, y0, ifelse(x > x1, y1, y0 + (y1 - y0) * (0.5 - 0.5 * cos(pi * (x - x0) / (x1 - x0)))))
-  }
+  {     ifelse(x < x0, y0, ifelse(x > x1, y1, y0 + (y1 - y0) * (0.5 - 0.5 * cos(pi * (x - x0) / (x1 - x0)))))   }
   age_groups[, mid := mean(c(age_low, age_high)), by=seq_len(nrow(age_groups))]
   age_y = covid_parameters[["clinical_fraction"]][["values"]][["age_y"]]
   age_m = covid_parameters[["clinical_fraction"]][["values"]][["age_m"]]
   age_o = covid_parameters[["clinical_fraction"]][["values"]][["age_o"]]
   # definition of "young", "middle", and "old"
-  young  = interpolate_cos(age_groups[, mid], age_y, 1, age_m, 0);
-  old    = interpolate_cos(age_groups[, mid], age_m, 0, age_o, 1);
-  middle = 1 - young - old;
-  symp_y = covid_parameters[["clinical_fraction"]][["values"]][["symp_y"]]
-  symp_m = covid_parameters[["clinical_fraction"]][["values"]][["symp_m"]]
-  symp_o = covid_parameters[["clinical_fraction"]][["values"]][["symp_o"]]
+  young=interpolate_cos(age_groups[, mid], age_y, 1, age_m, 0); old=interpolate_cos(age_groups[, mid], age_m, 0, age_o, 1);
+  middle=1-young-old; 
+  symp_y=covid_parameters[["clinical_fraction"]][["values"]][["symp_y"]]
+  symp_m=covid_parameters[["clinical_fraction"]][["values"]][["symp_m"]]
+  symp_o=covid_parameters[["clinical_fraction"]][["values"]][["symp_o"]]
   return(young * symp_y + middle * symp_m + old * symp_o)
 }
-
-
-### YYG model param fits ------------------------------------
-# read in json file of param fits by youyanggu model
-# install.packages("rjson"); library(rjson); library(jsonlite)
-# hungary_params <- jsonlite::fromJSON( "../yyg-seir-simulator/best_params/latest/global/Hungary_ALL.json" )
-# # fromJSON(file="yyg-seir-simulator/best_params/latest/global/Hungary_ALL.json")  # %>% as.data.frame
-# hu_paramfits=data.frame(rbind(cbind(hungary_params$top10_params,rep('best',nrow(hungary_params$top10_params))), 
-#       cbind(hungary_params$mean_params,rep('mean',nrow(hungary_params$top10_params))), 
-#       cbind(hungary_params$median_params,rep('median',nrow(hungary_params$top10_params)))),country="HU")
-# france_params <- jsonlite::fromJSON( "../yyg-seir-simulator/best_params/latest/global/France_ALL.json" )
-# # fromJSON(file="yyg-seir-simulator/best_params/latest/global/Hungary_ALL.json")  # %>% as.data.frame
-# fr_paramfits=data.frame(rbind(cbind(france_params$top10_params,rep('best',nrow(france_params$top10_params))), 
-#                               cbind(france_params$mean_params,rep('mean',nrow(france_params$top10_params))), 
-#                               cbind(france_params$median_params,rep('median',nrow(france_params$top10_params)))),country="FR")
-# View(merge(fr_paramfits,hu_paramfits,by = c("X1","X3")))
-######################
-# # MSE vs MLE
-# x<-rnorm(100,mean=20); b0<-10; b1<-20; y <- b1*x + b0 + rnorm(100);  df <- data.frame(x = x , y = y)
-# #
-# model <- lm(data = df , formula = y ~ x)
-# # loglikelihood
-# loglikelihood <- function(b0,b1){-sum(dnorm(df$y-(df$x*b1)-b0 , log=TRUE)) }    #-sum(log(R))
-# # library(stats4)
-# mle(loglikelihood, start = list(b0=1,b1=1))

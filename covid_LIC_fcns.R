@@ -67,8 +67,8 @@ df_ode_solution_tidy=reshape2::melt(df_ode_solution[,colSums(df_ode_solution)>0]
 df_ode_solution_tidy[,"vartype"]='noninf'; df_ode_solution_tidy[!grepl("S_",df_ode_solution_tidy$variable),"vartype"]='inf'  
 df_ode_solution_tidy[,"compartm"]=sapply(strsplit(as.character(df_ode_solution_tidy$variable),"_"),"[[",1)
 df_ode_solution_tidy[,"agegroup"]=sapply(strsplit(as.character(df_ode_solution_tidy$variable),"_"),"[[",2)
-list(df_ode_solution,df_ode_solution_tidy)
-}
+df_ode_solution_tidy$agegroup=as.numeric(df_ode_solution_tidy$agegroup)
+list(df_ode_solution,df_ode_solution_tidy) }
 
 ### set init conds
 fcn_set_init_conds<-function(inf_initval,init_inf_age_groups,init_inf_vartype,n_age,N_tot,vartype_list,ind_all_susceptibles){

@@ -65,17 +65,22 @@ l_proc_sol=fcn_proc_ode_output(ode_solution,full_varname_list,ind_all_inf_vars)
 df_ode_solution=l_proc_sol[[1]]; df_ode_solution_tidy=l_proc_sol[[2]]
 
 # PLOT
-xval_breaks=seq(timesteps[1],timesteps[length(timesteps)],10); xlim_val=150; standard_theme$axis.text.y$size=6
-df_age_groups=df_ode_solution_tidy %>% group_by(agegroup,vartype) %>% 
-  summarise(max_val=max(value),min_val=min(value),opt_val=(max(value)+min(value))/2)
-ggplot(df_ode_solution_tidy,aes(x=t,y=value,group=variable,color=compartm)) + geom_line(size=1.05) + 
+xval_breaks=seq(timesteps[1],timesteps[length(timesteps)],10); xlim_val=90; standard_theme$axis.text.y$size=6
+df_age_groups=df_ode_solution_tidy %>% group_by(agegroup,vartype) %>% summarise(max_val=max(value),
+        min_val=min(value),opt_val=(max(value)+min(value))/2,opt_fract_val=(max(fract_value)+min(fract_value))/2)
+df_age_groups[,"agegroup_str"]=paste("age:",df_age_groups$agegroup)
+# absolute or % value?
+abs_or_fract=1
+if (abs_or_fract==1){value_col="value";label_col="opt_val";savetag="absval"} else {
+  value_col="fract_value"; label_col="opt_fract_val";savetag="fractval"}
+ggplot(df_ode_solution_tidy,aes_string(x="t",y=value_col,group="variable",color="compartm")) + geom_line(size=1.05) + 
   facet_wrap(~agegroup+vartype,scales='free_y',ncol=4) + 
-  geom_text(data=df_age_groups,aes(x=7,y=opt_val,label=paste("age:",agegroup),group=NULL),size=3,color="black") +
+  geom_text(data=df_age_groups,aes_string(x=7,y=label_col,label="agegroup_str",group=NULL),size=3,color="black") +
   theme_bw() + standard_theme + theme(strip.background=element_blank(),strip.text=element_blank()) + 
   labs(linetype='vars',color='vars') + scale_x_continuous(breaks=xval_breaks,limits=c(0,xlim_val)) + 
   xlab('days') + ylab('') + ggtitle(paste0(paste0(vartype_list,collapse="-"),'-R simulation'))
 # SAVE
-ggsave(paste0("plots/SEIR_age_str_",n_age,"agegroups.png"),width=30,height=20,units="cm")
+ggsave(paste0("plots/SEIR_age_str_",n_age,"agegroups_",savetag,".png"),width=30,height=20,units="cm")
 # ,minor_breaks=; seq(timesteps[1],timesteps[length(timesteps)],10)
 # facet_grid(agegroup~vartype,rows=vars(agegroup),cols=vars(vartype),scales="free") + # 
 # scale_linetype_manual("vars",values=c("dotdash","solid")) + # data=data.frame(agegroup=age_range),

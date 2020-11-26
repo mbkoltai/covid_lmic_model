@@ -68,6 +68,11 @@ df_ode_solution_tidy[,"vartype"]='noninf'; df_ode_solution_tidy[!grepl("S_",df_o
 df_ode_solution_tidy[,"compartm"]=sapply(strsplit(as.character(df_ode_solution_tidy$variable),"_"),"[[",1)
 df_ode_solution_tidy[,"agegroup"]=sapply(strsplit(as.character(df_ode_solution_tidy$variable),"_"),"[[",2)
 df_ode_solution_tidy$agegroup=as.numeric(df_ode_solution_tidy$agegroup)
+# fractional values as susceptible popul of age group
+df_ode_solution_tidy[,"fract_value"]=df_ode_solution_tidy$value
+for (k in 1:n_age) {df_ode_solution_tidy$fract_value[df_ode_solution_tidy$agegroup==k]=
+    df_ode_solution_tidy$value[df_ode_solution_tidy$agegroup==k]/N_tot[k]}
+# output
 list(df_ode_solution,df_ode_solution_tidy) }
 
 ### set init conds

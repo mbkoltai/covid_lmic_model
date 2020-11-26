@@ -3,6 +3,7 @@
 *.docx
 .docx#
 *.png
+*.html
 *.odt
 .odt#
 *.xlsx

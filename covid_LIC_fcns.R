@@ -85,3 +85,24 @@ initvals_seir_model[ind_inf_initvals]=inf_initval; initvals_m=matrix(initvals_se
 initvals_seir_model[ind_all_susceptibles]=initvals_seir_model[ind_all_susceptibles]-colSums(initvals_m[2:nrow(initvals_m),])
 initvals_seir_model
 }
+
+### clinical fraction interpolation
+#' calculate probability of clinical disease by age group
+#' following posterior estimates by Davies et al
+getClinicalFraction <- function(age_groups){
+  #' smoothly interpolate between points (x0, y0) and (x1, y1) using cosine interpolation.
+  #' for x < x0, returns y0; for x > x1, returns y1; for x0 < x < x1, returns the cosine interpolation between y0 and y1
+  interpolate_cos = function(x, x0, y0, x1, y1)
+  {     ifelse(x < x0, y0, ifelse(x > x1, y1, y0 + (y1 - y0) * (0.5 - 0.5 * cos(pi * (x - x0) / (x1 - x0)))))   }
+  age_groups[, mid := mean(c(age_low, age_high)), by=seq_len(nrow(age_groups))]
+  age_y = covid_parameters[["clinical_fraction"]][["values"]][["age_y"]]
+  age_m = covid_parameters[["clinical_fraction"]][["values"]][["age_m"]]
+  age_o = covid_parameters[["clinical_fraction"]][["values"]][["age_o"]]
+  # definition of "young", "middle", and "old"
+  young=interpolate_cos(age_groups[, mid], age_y, 1, age_m, 0); old=interpolate_cos(age_groups[, mid], age_m, 0, age_o, 1);
+  middle=1-young-old; 
+  symp_y=covid_parameters[["clinical_fraction"]][["values"]][["symp_y"]]
+  symp_m=covid_parameters[["clinical_fraction"]][["values"]][["symp_m"]]
+  symp_o=covid_parameters[["clinical_fraction"]][["values"]][["symp_o"]]
+  return(young * symp_y + middle * symp_m + old * symp_o)
+}

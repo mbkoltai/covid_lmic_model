@@ -184,22 +184,7 @@ lmic_symptom_fract=c(rep(0.2973718,2), rep(0.2230287,2), rep(0.4191036,2), rep(0
 age_groups <- data.table(age_group=c(1:16), age_low=c(seq(0,75,5) ), age_high=c( seq(4, 74, 5), 100) )
 covid_parameters<-list("clinical_fraction"=list(values=list("age_y"=19,"age_m"=50,"age_o"=68,
                                                             "symp_y"=0.037,"symp_m"=0.3,"symp_o"=0.65)) )
-#' calculate probability of clinical disease by age group
-#' following posterior estimates by Davies et al
-getClinicalFraction <- function(age_groups){
-  #' smoothly interpolate between points (x0, y0) and (x1, y1) using cosine interpolation.
-  #' for x < x0, returns y0; for x > x1, returns y1; for x0 < x < x1, returns the cosine interpolation between y0 and y1
-  interpolate_cos = function(x, x0, y0, x1, y1)
-  {     ifelse(x < x0, y0, ifelse(x > x1, y1, y0 + (y1 - y0) * (0.5 - 0.5 * cos(pi * (x - x0) / (x1 - x0)))))   }
-  age_groups[, mid := mean(c(age_low, age_high)), by=seq_len(nrow(age_groups))]
-  age_y = covid_parameters[["clinical_fraction"]][["values"]][["age_y"]]
-  age_m = covid_parameters[["clinical_fraction"]][["values"]][["age_m"]]
-  age_o = covid_parameters[["clinical_fraction"]][["values"]][["age_o"]]
-  # definition of "young", "middle", and "old"
-  young=interpolate_cos(age_groups[, mid], age_y, 1, age_m, 0); old=interpolate_cos(age_groups[, mid], age_m, 0, age_o, 1);
-  middle=1-young-old; 
-  symp_y=covid_parameters[["clinical_fraction"]][["values"]][["symp_y"]]
-  symp_m=covid_parameters[["clinical_fraction"]][["values"]][["symp_m"]]
-  symp_o=covid_parameters[["clinical_fraction"]][["values"]][["symp_o"]]
-  return(young * symp_y + middle * symp_m + old * symp_o)
-}
+
+# susceptibility from "Age-dependent effects...", 10-age bands
+suscept_vals=c(0.4,0.38,0.79,0.86,0.8,0.82,0.88,0.74)
+suscept_mean_age=4.5+(0:6)*10

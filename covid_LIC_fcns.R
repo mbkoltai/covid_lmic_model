@@ -63,7 +63,7 @@ seir_ode <- function(t,X,parms){
 fcn_proc_ode_output<-function(ode_solution,full_varname_list,ind_all_inf_vars){
 df_ode_solution=ode_solution %>% as.data.frame() %>% setNames(c("t",full_varname_list))
 # tidy format
-df_ode_solution_tidy=reshape2::melt(df_ode_solution[,colSums(df_ode_solution)>0],id.vars='t')
+df_ode_solution_tidy=melt(df_ode_solution[,colSums(df_ode_solution)>0],id.vars='t')
 df_ode_solution_tidy[,"vartype"]='noninf'; df_ode_solution_tidy[!grepl("S_",df_ode_solution_tidy$variable),"vartype"]='inf'  
 df_ode_solution_tidy[,"compartm"]=sapply(strsplit(as.character(df_ode_solution_tidy$variable),"_"),"[[",1)
 df_ode_solution_tidy[,"agegroup"]=sapply(strsplit(as.character(df_ode_solution_tidy$variable),"_"),"[[",2)
@@ -106,3 +106,54 @@ getClinicalFraction <- function(age_groups){
   symp_o=covid_parameters[["clinical_fraction"]][["values"]][["symp_o"]]
   return(young * symp_y + middle * symp_m + old * symp_o)
 }
+
+### age structure of a country --------------------
+fun_cntr_agestr=function(i_cntr,i_year,age_groups){
+  if (!any((.packages()) %in% "wpp2019")) {library(wpp2019)}; if (!exists("popF")) {data("pop")}
+cntr_agestr=data.frame(agegroups=popF[popF$name %in% i_cntr,"age"],values=popF[popF$name %in% i_cntr,i_year] +
+                                        popM[popM$name %in% i_cntr,i_year])
+agegr_truthvals=sapply(strsplit(as.character(cntr_agestr$agegroups),"-"),"[[",1) %in% age_groups$age_low
+N_tot=cntr_agestr$values[agegr_truthvals]
+N_tot[length(N_tot)]=N_tot[length(N_tot)]+sum(cntr_agestr$values[!agegr_truthvals])
+N_tot=N_tot*1e3; N_tot
+}
+
+### labels for SEIR dynamic plot ---------------------
+fun_labels_table=function(df_ode_solution_tidy,age_groups){
+df_age_groups=df_ode_solution_tidy %>% group_by(agegroup,vartype) %>% summarise(max_val=max(value),
+          min_val=min(value),opt_val=(max(value)+min(value))/2,opt_fract_val=(max(fract_value)+min(fract_value))/2)
+df_age_groups[,"agegroup_str"]=paste(age_groups$age_low[df_age_groups$agegroup],'-',
+                                     age_groups$age_high[df_age_groups$agegroup],sep="")
+df_age_groups}
+
+### interpolate suscept as fcn of age ----------------
+fun_interp_suscept=function(suscept_mean_age,suscept_vals,age_groups,N_tot){
+interpol_susc=data.frame(approx(suscept_mean_age,suscept_vals))
+interpol_susc$y[sapply(age_groups$mid, function(n_midage) {which.min(abs(interpol_susc$x - n_midage))})]/N_tot}
+
+### approximate clinical fraction by "S" shape ------
+# min_val=0.04; max_val=0.65; rep_min=5; rep_max=3; 
+fun_lin_approx_agedep_par=function(min_val,max_val,rep_min,rep_max){
+n_intersteps=nrow(age_groups)-(rep_max+rep_min)+1; slope=(max_val-min_val)/n_intersteps
+c(rep(min_val,rep_min),min_val+(1:(n_intersteps-1))*slope,rep(max_val,rep_max))
+# lines(age_groups$mid,clin_fract_approx)
+}
+
+### plot age-dependent params ----------------
+fun_plot_agedep_params=function(age_groups,u_val,y_val,f_val,N_tot,plot_flag){
+df_agedep_pars=data.frame(age_group=paste(age_groups$age_low,'-',age_groups$age_high,sep=""),suscept=u_val*N_tot,
+clin_fract=y_val,infectness=f_val) %>% pivot_longer(!age_group)
+df_agedep_pars$age_group=factor(df_agedep_pars$age_group,levels=unique(df_agedep_pars$age_group))
+if (nchar(plot_flag)>0){
+g<-ggplot(df_agedep_pars,aes(x=age_group,y=value,group=name,color=name)) + geom_line() + theme_bw() + standard_theme
+g} else {
+  df_agedep_pars
+}
+}
+
+### HIT vals calcul ----------------
+fun_hit_df_calc=function(df_ode_solution,N_tot,f_scale){
+HIT_vals=data.frame(t(1 - round(df_ode_solution[nrow(df_ode_solution),grepl('S_',colnames(df_ode_solution))]/N_tot,3)))
+HIT_vals[,"age group"]=factor(rownames(HIT_vals),levels=rownames(HIT_vals)); rownames(HIT_vals)=c(); 
+HIT_vals=HIT_vals[,c(2,1)]; colnames(HIT_vals)[2]="HIT"; HIT_vals[,"f_scale"]=f_scale
+HIT_vals}

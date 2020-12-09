@@ -3,14 +3,15 @@
 # to render as html: rmarkdown::render("RSV_kenya_SA_calculation.R",output_dir='output/cea_plots/')
 # library(tidyverse); library(reshape2); library(matrixStats); library(rstudioapi); # library(fitdistrplus)
 currentdir_path=dirname(rstudioapi::getSourceEditorContext()$path); setwd(currentdir_path)
-library(tidyverse); library(qs); library(wpp2019); library(countrycode); library(deSolve); library(data.table)
+library(tidyverse); library(wpp2019); library(countrycode); library(deSolve); # library(qs); library(data.table)
+covidm_abs_path="~/Desktop/research/models/epid_models/covid_model/lmic_model/covidm/"
 # functions and plotting theme
 source("covid_LIC_fcns.R")
 ### ### ### ### ### ### ### ### ### ### ### ###
 ### SEIR age structured (covidm) --------------------------
 
 # SEIR age structured ODEs
-seir_agestr_ode <- function(t,X,parms){ # params=list(K_m,C_m,b_m_full,u_val,a_m,ind_all_susceptibles,ind_all_inf_vars)
+seir_agestr_ode <- function(t,X,parms){ # params=list(K_m,C_m,b_m_full,u_val,a_m,ind_all_suscept,ind_all_inf_vars)
   K_m=parms[[1]];C_m=parms[[2]];b_m_full=parms[[3]]; u_val=parms[[4]];a_m=parms[[5]]; 
   susc_ind=parms[[6]]; inf_vars_inds=parms[[7]]
   dXdt=b_m_full %*% diag(X[susc_ind]) %*% C_m %*% diag(u_val) %*% a_m %*% X[inf_vars_inds] + K_m%*%X; list(dXdt) }
@@ -20,113 +21,89 @@ n_age=16; vartype_list=c('S','E','Ip','Ic','Is'); infect_vartype=c('E','Ip','Ic'
 full_varname_list=fun_seir_agestr_varnames(vartype_list,n_age)
 # name+age --> linear index: fun_sub2ind_seir_agestr(j_age=2,varname='Is',vartype_list,length(vartype_list),n_age=2)
 # POPULATION (age struct resol as in covidm)
-age_groups <- data.table(age_group=c(1:16), age_low=c(seq(0,75,5) ), age_high=c(seq(4,74,5),100))
+age_groups <- data.frame(age_group=c(1:16), age_low=c(seq(0,75,5) ), age_high=c(seq(4,74,5),100))
 # population data from wpp2019
-N_tot=fun_cntr_agestr("Sudan",i_year="2020",age_groups) # uniform: N_tot=rep(1e6,n_age)
-# AGE-DEPENDENT PARAMETERS
-# susceptibility (from "Age-dependent effects...", 10-year age bands)
-# LOOP in a transmission parameter
-for (f_scale_cnt in 0:10) {
-suscept_vals=c(0.4,0.38,0.79,0.86,0.8,0.82,0.88,0.74)/2; suscept_mean_age=c(4.5+(0:6)*10,175/2); 
-midpoint=(0.2+0.43)/2;delta=0.115;min_val=midpoint-1*delta;max_val=midpoint+1*delta
-u_val=fun_lin_approx_agedep_par(min_val,max_val,rep_min=3,rep_max=10)/N_tot; u_val=u_val*(2.859952e-07/mean(u_val))
-# fun_interp_suscept(suscept_mean_age,suscept_vals,age_groups,N_tot) # u_val=rep(0.3,n_age)/N_tot
-# CLINICAL FRACTION
-# y_val=0.04+(1:n_age)*0.6/n_age # from "Age-dependent" getClinicalFraction(age_groups)
-# f_scale needs to be 0<=x<=1
-f_scale=f_scale_cnt/10
-midpoint=0.345;delta=0.305;min_val=midpoint-f_scale*delta;max_val=midpoint+f_scale*delta
-mean_target=0.307; y_val=fun_lin_approx_agedep_par(min_val,max_val,rep_min=5,rep_max=3); y_val=y_val*(mean_target/mean(y_val))
-# CONTAGIOUSNESS
-f_val=rep(0.5,n_age)
-# plot params: fun_plot_agedep_params(age_groups,u_val,y_val,f_val,N_tot,'plot')
-# store param table
-if (f_scale_cnt==0) {age_dep_paramtable=cbind(fun_plot_agedep_params(age_groups,u_val,y_val,f_val,N_tot,''),f_scale)} else {
-  age_dep_paramtable=rbind(age_dep_paramtable,cbind(fun_plot_agedep_params(age_groups,u_val,y_val,f_val,N_tot,''),f_scale))
-}
-print(paste("u=",u_val[1],u_val[length(y_val)],mean(u_val),"\n", 
-            "y=",y_val[1],y_val[length(y_val)],mean(y_val),sep=" "))
+countryval="Italy"; N_tot=fun_cntr_agestr(countryval,i_year="2020",age_groups) # uniform: N_tot=rep(1e6,n_age)
+# CONTACT MATRIX
+if (!exists("covid_params")){cm_force_rebuild=F; cm_build_verbose=T; cm_version=2; source(file.path(covidm_abs_path,"R","covidm.R"))}
+if (countryval=="Sudan") {countryval="Ethiopia"}; covid_params=cm_parameters_SEI3R(countryval)
+C_m=Reduce('+',covid_params$pop[[1]]$matrices)
 # constant transmission parameters
-d_e=4; d_p=1.5; d_c=3.5; d_s=5; infect_first_ord_pars=c(d_e,d_p,d_c,d_s)
+d_e=1/3; d_p=1/2; d_c=1/3; d_s=1/5; infect_first_ord_pars=c(d_e,d_p,d_c,d_s)
+########################################################
+### AGE DEPENDENT parameters ---------------------------
+min_val_susc=1e-3; maxval_susc=0.1; midpoint_susc=(min_val_susc+maxval_susc)/2;delta_susc=maxval_susc-midpoint_susc; mean_susc_exp=0.05
+mean_clinfract=0.307; midpoint_clinfract=0.4; delta_clinfr=0.305
+### SINGLE SIMULATION ---------------------------
+# set params
+depval=1; u_val=fun_lin_approx_agedep_par(min_val_susc,max_val=maxval_susc,rep_min=3,rep_max=5) # /sum(N_tot)
+y_val=fun_lin_approx_agedep_par(min_val_clinfr,max_val=midpoint_clinfract+depval*delta_clinfr,rep_min=5,rep_max=3); f_val=rep(0.5,n_age)
 # KINETIC MATRIX (LINEAR TERMS)
 K_m=fun_seir_agestr_kinmatr(infect_vartype,vartype_list,n_age,infect_first_ord_pars,y_val)
 # vectors to scale FORCE of INFECTION terms
-list_bm_am=fun_force_inf_vects(vartype_list,forceinf_vars=c("S","E"),n_age,f_val); b_m_full=list_bm_am[[1]]; a_m=list_bm_am[[2]]
-# CONTACT MATRIX
-# call covidm for Ethiopia contact matrix
-if (!exists("covid_params")){cm_path="~/Desktop/research/models/epid_models/covid_model/lmic_model/covidm/"
-source(file.path(cm_path,"R","covidm.R")); cm_force_rebuild=F; cm_build_verbose=T; cm_version=2
-covid_params=cm_parameters_SEI3R("Ethiopia")}
-C_m=Reduce('+',covid_params$pop[[1]]$matrices) # home, work, school, other # matrix(1,n_age,n_age)
+list_bm_am=fun_force_inf_vects(vartype_list,forceinf_vars=c("S","E"),n_age,f_val,N_tot); b_m_full=list_bm_am[[1]]; a_m=list_bm_am[[2]]
 # inf vector is: b_m_full %*% diag(c(1,2)) %*% C_m %*% diag(u_val) %*% a_m %*% matrix(1,8,1)
-l=fun_inds_vartypes(n_age,vartype_list,infect_vartype); ind_all_inf_vars=l[[1]]; ind_all_susceptibles=l[[2]]
-# INITIAL CONDITIONS
-# seed epidemic by "E">0 in a given (or multiple) age groups
-initvals_seir_model=fcn_set_init_conds(inf_initval=10,init_inf_age_groups=7,init_inf_vartype="E",
-                                       n_age,N_tot,vartype_list,ind_all_susceptibles)
+l=fun_inds_vartypes(n_age,vartype_list,infect_vartype); ind_all_inf_vars=l[[1]]; ind_all_suscept=l[[2]]
+# INITIAL CONDITIONS (seed epidemic by "E">0 in a given (or multiple) age groups)
+initvals_seir_model=fcn_set_init_conds(inf_initval=10,init_inf_age_groups=7,init_inf_var="E",n_age,N_tot,vartype_list,ind_all_suscept)
 ### run ODEs ----------------------------
 # time resolution and duration
 n_days_year=365; n_years=1; max_time=n_years*n_days_year; timesteps <- seq(0,max_time,by=0.25)
 # define inputs for ODE fcn
-params=list(K_m, C_m, b_m_full, u_val, a_m, ind_all_susceptibles, ind_all_inf_vars)
-# RUN # 
+params=list(K_m, C_m, b_m_full, u_val, a_m, ind_all_suscept, ind_all_inf_vars)
+# RUN simulation
 ptm<-proc.time(); ode_solution<-lsoda(initvals_seir_model,timesteps,func=seir_agestr_ode,parms=params); proc.time() - ptm
 # PROCESS OUTPUT
 # df_ode_solution = ode_solution %>% as.data.frame() %>% setNames(c("t",full_varname_list))
-l_proc_sol=fcn_proc_ode_output(ode_solution,full_varname_list,ind_all_inf_vars)
-df_ode_solution=l_proc_sol[[1]]
+l_proc_sol=fcn_proc_ode_output(ode_solution,full_varname_list,ind_all_inf_vars); df_ode_solution=l_proc_sol[[1]]
+# final values
+final_vals=fun_final_vals(df_ode_solution,N_tot,"fract"); sum((1-final_vals)*N_tot)/sum(N_tot)
+# PLOT DYNAMICS (df_ode_solution_tidy=l_proc_sol[[2]])
+fun_seir_agegroups_dyn(age_groups,l_proc_sol[[2]],xlim_val=220,abs_or_fract=2,timesteps,standard_theme)
+ggsave(paste0("covid_simul_output/",countryval,"_simul/SEIR_age_str_",n_age,"agegroups_",savetag,".png"),width=30,height=20,units="cm")
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+### PARAMETER SCAN ---------------------------
+cntr_list=c("Sudan","Egypt","Brazil","Italy")
+# average age: fun_meanage_cntr(popM,popF,"Pakistan",year_str="2020")
+attack_rates_multipar_multicntr=fun_multipar_multicntr_scan(cntr_list,year_str="2020",age_groups,covidm_abs_path,scan_param_fullname,
+          n_loop=6,midpoint_susc,delta_susc,midpoint_clinfract,delta_clinfr,mean_susc_exp,mean_clinfract,n_age,
+          C_m,infect_first_ord_pars,infect_vartype,vartype_list,inf_initval=10,init_inf_age_groups=7,init_inf_var="E",n_years)
 
-# PLOT
-plot_flag=0
-if (plot_flag){
-df_ode_solution_tidy=l_proc_sol[[2]]; xlim_val=60; df_age_groups=fun_labels_table(df_ode_solution_tidy,age_groups)
-# absolute or % value?
-abs_or_fract=2
-if (abs_or_fract==1){value_col="value";label_col="opt_val";savetag="absval"} else {
-  value_col="fract_value"; label_col="opt_fract_val";savetag="fractval"}
-ggplot(df_ode_solution_tidy,aes_string(x="t",y=value_col,group="variable",color="compartm")) + geom_line(size=1.05) + 
-  facet_wrap(~agegroup+vartype,scales='free_y',ncol=4) + 
-  geom_text(data=df_age_groups,aes_string(x=3,y=label_col,label="agegroup_str",group=NULL),size=3,color="black") +
-  theme_bw() + standard_theme + theme(strip.background=element_blank(),strip.text=element_blank(),axis.text.y = element_text(size=6)) + 
-  labs(linetype='vars',color='vars') + scale_x_continuous(breaks=seq(timesteps[1],xlim_val,10),limits=c(0,xlim_val)) + 
-  xlab('days') + ylab('') + ggtitle(paste0(paste0(vartype_list,collapse="-"),'-R simulation'))
+# PLOT attack rates as fcn of par values FOR ONE CNTR
+# if (grepl("clin",varname)){ylimvals=c(0,0.575)} else {ylimvals=c(0.125,1)}
+countryval=cntr_list[3]
+ggplot(attack_rates_multipar_multicntr[attack_rates_multipar_multicntr$country %in% countryval,],
+       aes_string(x="agegroup_names",y="value",group="col_scale",color="col_scale")) + 
+ geom_line() + geom_point() + facet_grid(name~scanpar,switch="y",scales='free_y') + # facet_wrap(~name+scanpar,scales="free_y") +
+ theme_bw() + standard_theme + xlab("age group") + ggtitle(paste(countryval,"attack rates")) +
+ labs(color="age-dependence/level \nof transmission \nparameter") + scale_y_continuous(breaks=seq(0,1,0.05))
 # SAVE
-# ggsave(paste0("plots/SEIR_age_str_",n_age,"agegroups_",savetag,".png"),width=30,height=20,units="cm")
-}
-# infected fraction of popul (HIT)
-HIT_vals=fun_hit_df_calc(df_ode_solution,N_tot,f_scale_cnt)
-if (f_scale_cnt==0) {HIT_vals_scan=HIT_vals} else {HIT_vals_scan=rbind(HIT_vals_scan,HIT_vals)}
-} # end of for loop for scaling clinical fraction
+# cntr_dirname=paste0("covid_simul_output/",countryval,"_simul"); if (!dir.exists(cntr_dirname)) {dir.create(cntr_dirname)}
+ggsave(paste0("covid_simul_output/all_attackrates_agedep_",countryval,".png"),width=30,height=15,units="cm")
+#######
 
-# plot parscan results re HIT
-scan_parameter="clin_fract"
-ggplot(HIT_vals_scan,aes(x=`age group`,y=HIT,ymin=HIT,ymax=HIT,group=f_scale,color=factor(f_scale))) + geom_pointrange() + 
-  theme_bw() + standard_theme + labs(color=paste0('age dependence of \n ',scan_parameter)) + ylim(c(0.1,0.9))
-ggsave(paste0("plots/HIT_",scan_parameter,"_agedependence.png"),width=30,height=20,units="cm")
-# delete repetitions
-age_dep_paramtable_clean=age_dep_paramtable[!(!age_dep_paramtable$name %in% scan_parameter & age_dep_paramtable$f_scale!=1),]
-ggplot(age_dep_paramtable_clean,aes(x=age_group,y=value,group=interaction(name,f_scale),color=name)) + 
-  geom_line(aes(size=f_scale)) + scale_size(range = c(0.25,2)) + theme_bw() + standard_theme + 
-  labs(color="transmission parameter",size='age dependence')
-ggsave(paste0("plots/",scan_parameter,"_agedependence.png"),width=30,height=20,units="cm")
 
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
-### solve model by Julia ----------------------------
-# library("diffeqr")
-# setup package
-de <- diffeqr::diffeq_setup()
+
+
+# delete repetitions in par table
+age_dep_paramtable_clean=fun_paramtable_norep(age_dep_paramtable,scan_parameter)
+# plot parameter values
+ggplot(age_dep_paramtable_clean,aes(x=age_group,y=value,group=interaction(name,par_scale_cnt),color=name)) + 
+  geom_line(aes(size=par_scale_cnt)) + scale_size(range=c(0.25,2)) + theme_bw() + standard_theme + 
+  labs(color="transmission parameter",size='age dependence') + scale_y_continuous(breaks=(0:20)/20) +
+  ggtitle(paste(scan_param_fullname[grepl(gsub("_fract","",scan_parameter),scan_param_fullname)],"age dependence"))
+# SAVE
+ggsave(paste0("covid_simul_output/",countryval,"_simul/agedep_",scan_parameter,".png"),width=30,height=20,units="cm")
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### algebraic solution ----------------------------
-
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
-### SEIR with 1 age group ----------------------------
+### SEIR with 1 age group 
 # for one age group: set initconds for other age groups to 0
 # R0=N_tot*u_val*(y_val*((1/d_c + 1/d_p) - f_val/d_s) + f_val/d_s)
 # N_tot*u_val*(y_val*(1/d_c - f_val/d_S) + f_val/d_S)
 # INITCOND
-inf_initval=10; initvals_seir_model=fcn_set_init_conds(inf_initval,init_inf_age_groups=1,init_inf_vartype="E",n_age,N_tot,
-                                       vartype_list,ind_all_susceptibles)
+inf_initval=10; initvals_seir_model=fcn_set_init_conds(inf_initval,init_inf_age_groups=1,init_inf_var="E",n_age,N_tot,
+                                       vartype_list,ind_all_suscept)
 # RUN
 ptm<-proc.time(); ode_solution<-lsoda(initvals_seir_model,timesteps,func=seir_agestr_ode,parms=params); proc.time() - ptm
 # PROCESS OUTPUT

@@ -1,13 +1,14 @@
 # gitignore
 *.pdf
 *.docx
-.docx#
+*.docx#
 *.png
 *.html
 *.odt
-.odt#
+*.odt#
 *.xlsx
 *.tar.gz
+*.zip
 sandbox.R
 covidm/
 covid_eco_analysis/

@@ -23,17 +23,18 @@ full_varname_list=fun_seir_agestr_varnames(vartype_list,n_age)
 # POPULATION (age struct resol as in covidm)
 age_groups <- data.frame(age_group=c(1:16), age_low=c(seq(0,75,5) ), age_high=c(seq(4,74,5),100))
 # population data from wpp2019
-countryval="Italy"; N_tot=fun_cntr_agestr(countryval,i_year="2020",age_groups) # uniform: N_tot=rep(1e6,n_age)
+countryval="Sudan"; N_tot=fun_cntr_agestr(countryval,i_year="2020",age_groups) # uniform: N_tot=rep(1e6,n_age)
 # CONTACT MATRIX
-if (!exists("covid_params")){cm_force_rebuild=F; cm_build_verbose=T; cm_version=2; source(file.path(covidm_abs_path,"R","covidm.R"))}
-if (countryval=="Sudan") {countryval="Ethiopia"}; covid_params=cm_parameters_SEI3R(countryval)
+if (!exists("covid_params")){setwd("covidm/"); cm_force_rebuild=F; cm_build_verbose=T; cm_version=2; 
+source(file.path(covidm_abs_path,"R","covidm.R")); setwd("../")}
+covid_params=cm_parameters_SEI3R(gsub("Sudan","Ethiopia",countryval))
 C_m=Reduce('+',covid_params$pop[[1]]$matrices)
 # constant transmission parameters
 d_e=1/3; d_p=1/2; d_c=1/3; d_s=1/5; infect_first_ord_pars=c(d_e,d_p,d_c,d_s)
 ########################################################
 ### AGE DEPENDENT parameters ---------------------------
-min_val_susc=1e-3; maxval_susc=0.1; midpoint_susc=(min_val_susc+maxval_susc)/2;delta_susc=maxval_susc-midpoint_susc; mean_susc_exp=0.05
-mean_clinfract=0.307; midpoint_clinfract=0.4; delta_clinfr=0.305
+min_val_susc=1e-2; maxval_susc=0.1; midpoint_susc=(min_val_susc+maxval_susc)/2;delta_susc=maxval_susc-midpoint_susc; mean_susc_exp=0.05
+mean_clinfract=0.307; midpoint_clinfract=0.4; delta_clinfr=0.305; min_val_clinfr=0.05
 ### SINGLE SIMULATION ---------------------------
 # set params
 depval=1; u_val=fun_lin_approx_agedep_par(min_val_susc,max_val=maxval_susc,rep_min=3,rep_max=5) # /sum(N_tot)
@@ -41,7 +42,7 @@ y_val=fun_lin_approx_agedep_par(min_val_clinfr,max_val=midpoint_clinfract+depval
 # KINETIC MATRIX (LINEAR TERMS)
 K_m=fun_seir_agestr_kinmatr(infect_vartype,vartype_list,n_age,infect_first_ord_pars,y_val)
 # vectors to scale FORCE of INFECTION terms
-list_bm_am=fun_force_inf_vects(vartype_list,forceinf_vars=c("S","E"),n_age,f_val,N_tot); b_m_full=list_bm_am[[1]]; a_m=list_bm_am[[2]]
+list_bm_am=fun_force_inf_vects(vartype_list,forceinf_vars=c("S","E"),n_age,f_val,N_tot); b_m_full=list_bm_am[[1]];a_m=list_bm_am[[2]]
 # inf vector is: b_m_full %*% diag(c(1,2)) %*% C_m %*% diag(u_val) %*% a_m %*% matrix(1,8,1)
 l=fun_inds_vartypes(n_age,vartype_list,infect_vartype); ind_all_inf_vars=l[[1]]; ind_all_suscept=l[[2]]
 # INITIAL CONDITIONS (seed epidemic by "E">0 in a given (or multiple) age groups)
@@ -63,37 +64,74 @@ fun_seir_agegroups_dyn(age_groups,l_proc_sol[[2]],xlim_val=220,abs_or_fract=2,ti
 ggsave(paste0("covid_simul_output/",countryval,"_simul/SEIR_age_str_",n_age,"agegroups_",savetag,".png"),width=30,height=20,units="cm")
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 ### PARAMETER SCAN ---------------------------
-cntr_list=c("Sudan","Egypt","Brazil","Italy")
+cntr_list=c("Sudan","South Africa","Brazil","Italy");scan_param_fullname=c("susceptibility","clinical fraction","asymptomatic infectiousness")
 # average age: fun_meanage_cntr(popM,popF,"Pakistan",year_str="2020")
 attack_rates_multipar_multicntr=fun_multipar_multicntr_scan(cntr_list,year_str="2020",age_groups,covidm_abs_path,scan_param_fullname,
           n_loop=6,midpoint_susc,delta_susc,midpoint_clinfract,delta_clinfr,mean_susc_exp,mean_clinfract,n_age,
-          C_m,infect_first_ord_pars,infect_vartype,vartype_list,inf_initval=10,init_inf_age_groups=7,init_inf_var="E",n_years)
-
+          infect_first_ord_pars,infect_vartype,vartype_list,inf_initval=10,init_inf_age_groups=7,init_inf_var="E",n_years)
 # PLOT attack rates as fcn of par values FOR ONE CNTR
-# if (grepl("clin",varname)){ylimvals=c(0,0.575)} else {ylimvals=c(0.125,1)}
-countryval=cntr_list[3]
-ggplot(attack_rates_multipar_multicntr[attack_rates_multipar_multicntr$country %in% countryval,],
-       aes_string(x="agegroup_names",y="value",group="col_scale",color="col_scale")) + 
- geom_line() + geom_point() + facet_grid(name~scanpar,switch="y",scales='free_y') + # facet_wrap(~name+scanpar,scales="free_y") +
- theme_bw() + standard_theme + xlab("age group") + ggtitle(paste(countryval,"attack rates")) +
- labs(color="age-dependence/level \nof transmission \nparameter") + scale_y_continuous(breaks=seq(0,1,0.05))
+sel_var=c("fract_agegroup","fraction_cases","per_1000_popul")[2]; truthval_cntr=grepl("clin",attack_rates_multipar_multicntr$name)
+ggplot(attack_rates_multipar_multicntr[truthval_cntr,], aes_string(x="agegroup_names",y=sel_var,group="col_scale",color="col_scale")) + 
+ geom_line() + geom_point() + facet_grid(country~scanpar,switch="y") + # ,scales='free_y'  facet_wrap(~name+scanpar,scales="free_y") +
+ theme_bw() + standard_theme + xlab("age group") + ggtitle(paste0("clinical attack rates (",gsub("value","fraction",sel_var),")")) +
+ labs(color="age-dependence/level \nof transmission \nparameter") # + scale_y_continuous(breaks=seq(0,1,0.05))
 # SAVE
-# cntr_dirname=paste0("covid_simul_output/",countryval,"_simul"); if (!dir.exists(cntr_dirname)) {dir.create(cntr_dirname)}
-ggsave(paste0("covid_simul_output/all_attackrates_agedep_",countryval,".png"),width=30,height=15,units="cm")
+ggsave(paste0("covid_simul_output/attackrate_",sel_var,"_agedep.png"),width=30,height=15,units="cm")
 #######
+# summed attackrates (across age groups)
+attackrate_all_ages=attack_rates_multipar_multicntr %>% group_by(par_scale,scanpar,name,country) %>%
+  summarise(sum_attackrate_per1000=sum(per_1000_popul)) %>% # ,sum_attackrate_agegr_frac=round(sum(n_case)/sum(agegr_pop),3)
+  pivot_longer(cols=contains("attackrate"),names_to="vartype") # sum_attackrate_casenum=round(sum(n_case))
+# total attackrate
+maxval=ceiling(max(attackrate_all_ages$value[grepl("clin",attackrate_all_ages$name)])/50)*50
+sel_var=c("sum_attackrate_per1000","sum_attackrate_casenum","sum_attackrate_agegrfrac")[1] # sprintf("factor(%s)","par_scale")
+# [grepl("clin",attackrate_all_ages$name),]
+ggplot(attackrate_all_ages,aes(x=par_scale,y=value,color=country)) + geom_line(size=1.3) + 
+  facet_grid(name~scanpar,switch="y",scales="free_y") + theme_bw() + standard_theme + xlab('age dependence (asymp. inf.: level)') +
+  ylab("") + ggtitle('attack rates per 1000 popul') + labs(color="countries") + 
+  scale_x_continuous(breaks=unique(attackrate_all_ages$par_scale)) # + scale_y_continuous(limits=c(50,maxval),breaks=seq(0,maxval,50))
+ggsave(paste0("covid_simul_output/attackrates_sum_all_cntrs.png"),width=25,height=10,units="cm")
 
+### linelist data ----------------------------
+linelist_clean=readRDS("SDN_linelist_script/linelist_clean_2020-12-09.rds")
 
+### R0 and HIT ----------------------------
+countryval="Sudan"; N_tot=fun_cntr_agestr(countryval,i_year="2020",age_groups)
+covid_params=cm_parameters_SEI3R(gsub("Sudan","Ethiopia",countryval)); C_m=Reduce('+',covid_params$pop[[1]]$matrices)
+R0=fun_NGM_R0(N_tot,y_val,u_val,f_val,C_m,c(d_p,d_c,d_s))[[2]] # NGM=fun_NGM_R0(N_tot,y_val,u_val,f_val,C_m)[[1]]
+# # covidm default: dIp=2.4; dIs=3.2; dIa=7 ; y_def=rep(0.5,length(N_tot)); u_def=rep(0.08,length(N_tot))
+# NGM_def[i_row,j_col]=u_def[i_row]*C_m[i_row,j_col]*(y_def[j_col]*(2.4+3.2) + (1-y_def[j_col])*unique(f_val)*7) 
+# PARSCAN for R0
+min_val_susc=1e-2; maxval_susc=0.15; midpoint_susc=(min_val_susc+maxval_susc)/2; delta_susc=maxval_susc-midpoint_susc # mean_susc_exp=0.05
+midpoint_clinfract=0.4; delta_clinfr=0.35 # mean_clinfract=0.307; min_val_clinfr=0.05
+rep_min_susc=3; rep_max_susc=5; rep_min_clinfr=5; rep_max_clinfr=3
+### SINGLE SIMULATION ---------------------------
+# set params
+agedep_param_lims=c(midpoint_susc,delta_susc,rep_min_susc,rep_max_susc,midpoint_clinfract,delta_clinfr,rep_min_clinfr,rep_max_clinfr)
+R0_scan=fun_multidim_scan(N_tot,k_max,agedep_param_lims,c(d_p,d_c,d_s))
+# mycolors <- colorRampPalette(brewer.pal(8, "YlOrRd"))(length(unique(R0_scan$susc)))
+# HIT line plot
+ggplot(R0_scan,aes(x=susc,y=HIT,color=clinfract,group=clinfract)) + geom_line() + facet_wrap(~asympt_inf_str) + 
+  scale_color_distiller(palette="Spectral") + # scale_color_manual(values = mycolors) + # scale_color_brewer(palette="YlOrRd") + # 
+  theme_bw() + standard_theme + xlab("susceptibility") + ylab("clinical fraction") + ylim(c(0.33,0.92)) + 
+  ggtitle(paste0(countryval," herd immunity threshold"))
+ggsave(paste0("covid_simul_output/HIT_",countryval,".png"),width=20,height=12,units="cm")
+
+# HIT heatmap
+# ggplot(R0_scan,aes(x=susc,y=clinfract,fill=HIT)) + geom_tile() + facet_wrap(~asympt_inf_str) + scale_fill_distiller(palette="Spectral") +
+#   geom_text(aes(label = round(HIT,2)),size=3) + theme_bw() + standard_theme + xlab("susceptibility") + ylab("clinical fraction") + 
+#   ggtitle(paste0(countryval," herd immunity threshold"))
 
 
 # delete repetitions in par table
-age_dep_paramtable_clean=fun_paramtable_norep(age_dep_paramtable,scan_parameter)
-# plot parameter values
-ggplot(age_dep_paramtable_clean,aes(x=age_group,y=value,group=interaction(name,par_scale_cnt),color=name)) + 
-  geom_line(aes(size=par_scale_cnt)) + scale_size(range=c(0.25,2)) + theme_bw() + standard_theme + 
-  labs(color="transmission parameter",size='age dependence') + scale_y_continuous(breaks=(0:20)/20) +
-  ggtitle(paste(scan_param_fullname[grepl(gsub("_fract","",scan_parameter),scan_param_fullname)],"age dependence"))
-# SAVE
-ggsave(paste0("covid_simul_output/",countryval,"_simul/agedep_",scan_parameter,".png"),width=30,height=20,units="cm")
+# age_dep_paramtable_clean=fun_paramtable_norep(age_dep_paramtable,scan_parameter)
+# # plot parameter values
+# ggplot(age_dep_paramtable_clean,aes(x=age_group,y=value,group=interaction(name,par_scale_cnt),color=name)) + 
+#   geom_line(aes(size=par_scale_cnt)) + scale_size(range=c(0.25,2)) + theme_bw() + standard_theme + 
+#   labs(color="transmission parameter",size='age dependence') + scale_y_continuous(breaks=(0:20)/20) +
+#   ggtitle(paste(scan_param_fullname[grepl(gsub("_fract","",scan_parameter),scan_param_fullname)],"age dependence"))
+# # SAVE
+# ggsave(paste0("covid_simul_output/",countryval,"_simul/agedep_",scan_parameter,".png"),width=30,height=20,units="cm")
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### algebraic solution ----------------------------
@@ -140,7 +178,7 @@ param_scan_sols_table[,"HIT"]=1-param_scan_sols_table$S_stat_sol_vals
 
 # plot HIT
 # facet by infectiousness
-ttl_str=expression("Herd immunity threshold ~ susceptibility ("~sigma~"), 
+ttl_str=expression("attack rate ~ susceptibility ("~sigma~"), 
                    asympt. infectiousness (f), clinical fraction ("~gamma~")")
 # facet by infectiousness
 ggplot(param_scan_sols_table,aes(x=u_vals,y=HIT,group=factor(gamma),color=factor(gamma))) + geom_line() + 
@@ -167,27 +205,27 @@ ggsave(paste0("plots/",paste0(varname_list,collapse=""),"_analyt_sol_facetcontag
 #   theme_bw() + standard_theme
 
 ### covidm parameters ------------------------------------------------------------------
-sample_size=1e4
-# d_e (pre-infectious days)
-mean_g=4; shape_g=4; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g))
-# d_p (presympt inf.)
-mean_g=1.5; shape_g=4; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g))
-# dC (Duration of symptomatic infectiousness in days)
-mean_g=3.5; shape_g=4; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g))
-# dS (Duration of asymptomatic infectiousness in days)
-mean_g=5; shape_g=4; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g))
-# R0
-mean(rnorm(sample_size,2.6,0.5))
-# Delay from symptom onset to becoming a severe case in days (mean: 7 days)
-mean_g=7; shape_g=8; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g))
-# Duration of severe, non-critical disease in days ~ Gamma(μ=8,k=8)
-# Proportion of severe cases that become critical: 30%
-# Duration of severe, critical disease in days ~ Gamma(μ = 10, k = 10)
-# Delay from symptom onset to death in days ~ Gamma(μ=22,k=22)
-
-lmic_symptom_fract=c(rep(0.2973718,2), rep(0.2230287,2), rep(0.4191036,2), rep(0.4445867,2), rep(0.5635720,2), rep(0.8169443,6))
-# library(data.table)
-age_groups <- data.table(age_group=c(1:16), age_low=c(seq(0,75,5) ), age_high=c( seq(4, 74, 5), 100) )
-covid_parameters<-list("clinical_fraction"=list(values=list("age_y"=19,"age_m"=50,"age_o"=68,
-                                                            "symp_y"=0.037,"symp_m"=0.3,"symp_o"=0.65)) )
-plot(age_groups$mid,getClinicalFraction(age_groups),type="b")
+# sample_size=1e4
+# # d_e (pre-infectious days)
+# mean_g=4; shape_g=4; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g))
+# # d_p (presympt inf.)
+# mean_g=1.5; shape_g=4; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g))
+# # dC (Duration of symptomatic infectiousness in days)
+# mean_g=3.5; shape_g=4; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g))
+# # dS (Duration of asymptomatic infectiousness in days)
+# mean_g=5; shape_g=4; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g))
+# # R0
+# mean(rnorm(sample_size,2.6,0.5))
+# # Delay from symptom onset to becoming a severe case in days (mean: 7 days)
+# mean_g=7; shape_g=8; mean(rgamma(sample_size,shape=shape_g,scale=mean_g/shape_g))
+# # Duration of severe, non-critical disease in days ~ Gamma(μ=8,k=8)
+# # Proportion of severe cases that become critical: 30%
+# # Duration of severe, critical disease in days ~ Gamma(μ = 10, k = 10)
+# # Delay from symptom onset to death in days ~ Gamma(μ=22,k=22)
+# 
+# lmic_symptom_fract=c(rep(0.2973718,2), rep(0.2230287,2), rep(0.4191036,2), rep(0.4445867,2), rep(0.5635720,2), rep(0.8169443,6))
+# # library(data.table)
+# age_groups <- data.table(age_group=c(1:16), age_low=c(seq(0,75,5) ), age_high=c( seq(4, 74, 5), 100) )
+# covid_parameters<-list("clinical_fraction"=list(values=list("age_y"=19,"age_m"=50,"age_o"=68,
+#                                                             "symp_y"=0.037,"symp_m"=0.3,"symp_o"=0.65)) )
+# plot(age_groups$mid,getClinicalFraction(age_groups),type="b")

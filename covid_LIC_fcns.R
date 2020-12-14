@@ -256,11 +256,11 @@ fun_paramscan_singlepar=function(age_dep_paramtable,infect_first_ord_pars,infect
   params=list(K_m, C_m, b_m_full, u_val, a_m, ind_all_susceptibles, ind_all_inf_vars)
   # RUN # 
   ode_solution<-lsoda(initvals_seir_model,timesteps,func=seir_agestr_ode,parms=params)
-  print(paste("u (suscept)=[",round(u_val[1]/(10^floor(log10(u_val[1]))),2),"e",floor(log10(u_val[1])), 
+  print(paste("u (susc)=[",round(u_val[1]/(10^floor(log10(u_val[1]))),2),"e",floor(log10(u_val[1])), 
    round(u_val[length(u_val)]/(10^floor(log10(u_val[length(u_val)]))),2),"e",floor(log10(u_val[length(u_val)])),"] mean=",
    round(mean(u_val)/(10^floor(log10(mean(u_val)))),2),"e",floor(log10(mean(u_val))), "|",
-              "y (clin fract) =[",round(y_val[1],3),round(y_val[length(y_val)],3),"] mean=",round(mean(y_val),2),"|",
-              "f (inf asympt) =[",round(f_val[1],3),round(f_val[length(f_val)],3),"] mean=",round(mean(f_val),2), sep=" "))
+              "y (clinfrac) =[",round(y_val[1],3),round(y_val[length(y_val)],3),"] mean=",round(mean(y_val),2),"|",
+              "f (inf asym) =[",round(f_val[1],3),round(f_val[length(f_val)],3),"] mean=",round(mean(f_val),2), sep=" "))
   # PROCESS OUTPUT
   l_proc_sol=fcn_proc_ode_output(ode_solution,full_varname_list,ind_all_inf_vars); df_ode_solution=l_proc_sol[[1]]
   # infected fraction of popul (HIT)
@@ -277,7 +277,7 @@ fun_paramscan_singlepar=function(age_dep_paramtable,infect_first_ord_pars,infect
 ### parameter scan for multiple parameters and countries --------------------------------
 fun_multipar_multicntr_scan=function(cntr_list,year_str,age_groups,covidm_abs_path,scan_param_fullname,n_loop,
                                      midpoint_susc,delta_susc,midpoint_clinfract,delta_clinfr,mean_susc_exp,mean_clinfract,n_age,
-                                     C_m,infect_first_ord_pars,infect_vartype,vartype_list,
+                                     infect_first_ord_pars,infect_vartype,vartype_list,
                                      inf_initval,init_inf_age_groups,init_inf_var,n_years){
 for (k_cntr in 1:length(cntr_list)){countryval=cntr_list[k_cntr]; N_tot=fun_cntr_agestr(countryval,i_year=year_str,age_groups) 
 # uniform: N_tot=rep(1e6,n_age)
@@ -285,6 +285,8 @@ for (k_cntr in 1:length(cntr_list)){countryval=cntr_list[k_cntr]; N_tot=fun_cntr
 if (!exists("covid_params")){cm_force_rebuild=F; cm_build_verbose=T; cm_version=2; source(file.path(covidm_abs_path,"R","covidm.R"))}
 covid_params=cm_parameters_SEI3R(gsub("Sudan","Ethiopia",countryval))
 C_m=Reduce('+',covid_params$pop[[1]]$matrices)
+numchars=paste0(as.character(round(c(sum(N_tot)/1e6,median(C_m),max(Re(eigen(C_m)$values))),1)),collapse = "," )
+print(paste0(countryval," [popul,median(C_m),max(eigval(C_m))] = [",numchars,"]"))
 # scan in parameter
 # scan_param_fullname=c("susceptibility","clinical fraction","asymptomatic infectiousness")
 for (k_par in 1:length(scan_param_fullname)){ # n_loop=6
@@ -296,11 +298,49 @@ attack_rates_scan[,"scanpar"]=scan_param_fullname[k_par]; if (k_par==1){attack_r
   attack_rates_scan_multipar=rbind(attack_rates_scan_multipar,attack_rates_scan)} }
 # long format
 attack_rates_scan_multipar[,"country"]=countryval; att_colns=colnames(attack_rates_scan_multipar)
-attack_rates_scan_multipar=attack_rates_scan_multipar %>% pivot_longer(!att_colns[!grepl("attack",att_colns)])
+attack_rates_scan_multipar=attack_rates_scan_multipar %>% pivot_longer(!att_colns[!grepl("attack",att_colns)],values_to="fract_agegroup")
+# case numbers
+attack_rates_scan_multipar[,"agegr_pop"]=rep(as.vector(t(matrix(rep(N_tot,2),ncol=2))),
+                                    nrow(attack_rates_scan_multipar)/length(as.vector(t(matrix(rep(N_tot,2),ncol=2)))))
+attack_rates_scan_multipar[,"n_case"]=round(attack_rates_scan_multipar$agegr_pop*attack_rates_scan_multipar$fract_agegroup,1)
+attack_rates_scan_multipar[,"per_1000_popul"]=round(1e3*attack_rates_scan_multipar$n_case/sum(N_tot),1)
+
 if (k_cntr==1) {attack_rates_multipar_multicntr=attack_rates_scan_multipar} else {
   attack_rates_multipar_multicntr=rbind(attack_rates_multipar_multicntr,attack_rates_scan_multipar)}
 } # end of for loop for cntrs
+  attack_rates_multipar_multicntr=attack_rates_multipar_multicntr %>% group_by(par_scale,scanpar,name,country) %>% 
+    mutate(fraction_cases=n_case/sum(n_case))
   attack_rates_multipar_multicntr
+}
+
+### calculate NGM and R0 -----------------
+fun_NGM_R0=function(N_tot,y_val,u_val,f_val,C_m,lin_rates){
+NGM=matrix(0,nrow=length(N_tot),ncol=length(N_tot)); g(d_p,d_c,d_s) %=% lin_rates
+for (i_row in 1:length(y_val)){ for (j_col in 1:length(y_val)){
+  # agegr_frac=N_tot[i_row]/sum(N_tot) # 1
+  NGM[i_row,j_col]=u_val[i_row]*C_m[i_row,j_col]*(y_val[j_col]*(1/d_p+1/d_c) + (1-y_val[j_col])*unique(f_val)/d_s) } }
+list(NGM,max(Re(eigen(NGM)$values)))
+}
+
+### multidimensional scan for R0 -----------------
+fun_multidim_scan=function(N_tot,k_max,agedep_param_lims,lin_rates){
+R0_scan=data.frame(matrix(0,ncol=5,nrow=k_max^3)); k_count=0; colnames(R0_scan)=c("susc","clinfract","asympt_inf","R0","HIT")
+g(midpoint_susc,delta_susc,rep_min_susc,rep_max_susc,midpoint_clinfract,delta_clinfr,rep_min_clinfr,rep_max_clinfr) %=% agedep_param_lims
+for (k_susc in 1:k_max){
+  for (k_clinfrac in 1:k_max){
+    for (k_infect in 1:k_max){
+      u_val=fun_lin_approx_agedep_par(min_val=midpoint_susc-(k_susc/k_max)*delta_susc,
+                                      max_val=midpoint_susc+(k_susc/k_max)*delta_susc,rep_min_susc,rep_max_susc)
+      y_val=fun_lin_approx_agedep_par(midpoint_clinfract-(k_clinfrac/k_max)*delta_clinfr,
+                                      midpoint_clinfract+(k_clinfrac/k_max)*delta_clinfr,rep_min_clinfr,rep_max_clinfr); 
+      f_val=k_infect/k_max; k_count=k_count+1; 
+      R0=fun_NGM_R0(N_tot,y_val,u_val,f_val,C_m,lin_rates)[[2]]; R0_scan[k_count,]=c(k_susc,k_clinfrac,k_infect,R0,1-1/R0)
+    }
+  } 
+}
+R0_scan[,"asympt_inf_str"]=factor(paste0("asympt inf=",R0_scan$asympt_inf/k_max),
+                                  levels=unique(paste0("asympt inf=",R0_scan$asympt_inf/k_max)))
+R0_scan
 }
 
 ############

@@ -1,0 +1,119 @@
+STATE,REGION,DISTRICT,ADM1_VIZ_N,ADM2_VIZ_N,REGION CODE,DISRICT CODE,REG-DIST,Total Pop,Positivity,Attack rate per 100K,Number of Cases,Total Tested,Increase or decrease from mean
+Banadir,BANADIR,MEDINA,Banadir,Madina (Wadajir),BAN,MDN,BAN-MDN,"178,751",16,182,326,1391,1
+Banadir,BANADIR,WARDEGLY,Banadir,Wardegly,BAN,WDA,BAN-WDA,"131,768",25,131,172,699,-1
+Banadir,BANADIR,WABERI,Banadir,Waberi,BAN,WBR,BAN-WBR,"95,945",33,110,106,451,-1
+Puntland,NUGAL,GAROWE,Nugal,Garowe,NUG,GRW,NUG-GRW,"211,290",23,108,229,429,1
+Banadir,BANADIR,HODAN,Banadir,Hodan,BAN,HDN,BAN-HDN,"239,557",12,102,244,1166,-1
+Somaliland,SAHIL,BERBERA,Sahil,Berbera,SAH,BER,SAH-BER,"160,711",45,87,140,179,-1
+Galmudug State,GALGADUD,ADADO,Galgadud,Adado,GDD,ADD,GDD-ADD,"74,768",38,86,64,227,-1
+Banadir,BANADIR,HAMAR JABJAB,Banadir,Hamar Jabjab,BAN,HJB,BAN-HJB,"90,939",43,76,69,227,-1
+Banadir,BANADIR,BONDERE,Banadir,Bondere,BAN,BDB,BAN-BDB,"104,787",35,72,75,238,-1
+Banadir,BANADIR,HAWAL WADAG,Banadir,Hawal Wadag,BAN,HWL,BAN-HWL,"113,161",23,67,76,396,-1
+Somaliland,GALBEED,HARGEISA,Galbeed,Hargeisa,WGB,HAR,WGB-HAR,"884,600",6,64,570,1087,1
+South West State,LOWER SHABELLE,BRAVA,Lower Shabelle,Brava,LSH,BRV,LSH-BRV,"54,775",130,64,35,49,-1
+Banadir,BANADIR,ABDUL AZIZ,Banadir,Abdul Aziz,BAN,ADA,BAN-ADA,"55,641",56,59,33,124,-1
+Jubaland State,LOWER JUBA,KISMAYO,Lower Juba,Kismayo,LJB,KIS,LJB-KIS,"303,701",12,52,158,447,-1
+Banadir,BANADIR,DANYILE,Banadir,DAYNILE,BAN,DYN,BAN-DYN,"150,452",18,45,68,313,-1
+Banadir,BANADIR,HAMAR WEYNE,Banadir,Hamar Weyn,BAN,HMW,BAN-HMW,"95,512",25,44,42,219,-1
+Banadir,BANADIR,DHARKENLEY,Banadir,Dharkenly,BAN,DRK,BAN-DRK,"252,613",12,39,98,461,-1
+Banadir,BANADIR,SHANGANI,Banadir,Shangani,BAN,SHN,BAN-SHN,"41,772",56,38,16,72,-1
+Banadir,BANADIR,KARAN,Banadir,Karan,BAN,KRN,BAN-KRN,"251,825",13,35,88,304,-1
+Puntland,KARKAR,WACIYA,Karkar,Waciya,KRK,WAY,KRK-WAY,"38,434",130,31,12,24,-1
+Banadir,BANADIR,SHIBIS,Banadir,Shibis,BAN,SBS,BAN-SBS,"160,469",15,28,45,247,-1
+Puntland,KARKAR,GARDO,Karkar,Gardo,KRK,GAR,KRK-GAR,"142,557",40,27,39,68,-1
+Jubaland State,GEDO,BELET HAWA,Gedo,Belet Hawa,GDO,BLH,GDO-BLH,"109,123",18,27,29,143,-1
+Banadir,BANADIR,HELIWA,Banadir,Heliwa,BAN,HLW,BAN-HLW,"145,740",20,23,33,143,-1
+Somaliland,AWDAL,BORAMA,Awdal,Borama,AWL,BOR,AWL-BOR,"365,171",21,21,78,101,-1
+Galmudug State,MUDUG GM,GALKAYU SOUTH,Mudug GM,Galkayu South,MDG,SGA,MDG-SGA,"198,924",17,16,31,91,-1
+Somaliland,TOGDHER,BURAO,Togdher,Burao,TOG,BUR,TOG-BUR,"440,320",10,12,53,119,-1
+South West State,BAY,BAIDOA,Bay,Baidoa,BAY,BDB,BAY-BDB,"499,056",7,12,59,164,-1
+Galmudug State,GALGADUD,BALANBALE,Galgadud,Balanbale,GDD,BLB,GDD-BLB,"45,578",26,11,5,43,-1
+South West State,LOWER SHABELLE,MARKA,Lower Shabelle,Marka,LSH,MAR,LSH-MAR,"247,082",25,11,27,44,-1
+Galmudug State,GALGADUD,DUSAMREB,Galgadud,Dusamreb,GDD,DSB,GDD-DSB,"92,566",20,10,9,48,-1
+Galmudug State,GALGADUD,GURIEL,Galgadud,Guriel,GDD,GUR,GDD-GUR,"72,028",18,10,7,55,-1
+Banadir,BANADIR,KAHDA,Banadir,Kahda,BAN,KDA,BAN-KDA,"245,255",15,9,22,60,-1
+South West State,BAKOL,HUDUR,Bakol,Hudur,BKL,HUD,BKL-HUD,"97,253",36,8,8,23,-1
+Puntland,BARI,ALULA,Bari,Alula,BRI,ALU,BRI-ALU,"51,289",195,8,4,4,-1
+Puntland,BARI,BOSSASO,Bari,Bossaso,BRI,BOS,BRI-BOS,"645,928",9,7,46,73,-1
+Somaliland,AWDAL,ZEILA,Awdal,Zeila,AWL,SAY,AWL-SAY,"56,233",178,7,4,4,-1
+Puntland,MUDUG PL,GALKAYU NORTH,Mudug PL,Galkayu North,MUD,GAL,MUD-GAL,"497,531",12,6,29,48,-1
+Hir-Shabelle State,HIRAN,BULO BURTI,Hiran,Bulo Burti,HRN,BBT,HRN-BBT,"40,469",6,5,2,78,-1
+Hir-Shabelle State,HIRAN,BELET WEYNE,Hiran,Belet Weyne,HRN,BLT,HRN-BLT,"228,253",8,5,11,60,-1
+Jubaland State,GEDO,GARBAHARE,Gedo,Garbahare,GDO,GBH,GDO-GBH,"91,335",73,4,4,6,-1
+Galmudug State,GALGADUD,ABUDWAQ,Galgadud,Abudwaq,GDD,ABD,GDD-ABD,"77,008",14,4,3,31,-1
+South West State,LOWER SHABELLE,AFGOI,Lower Shabelle,Afgoi,LSH,AFG,LSH-AFG,"305,513",7,4,11,53,-1
+Somaliland,SOOL,LAS ANOD,Sool,Las Anod,SOL,LND,SOL-LND,"223,474",14,4,8,25,-1
+Hir-Shabelle State,MIDDLE SHABELLE,JOWHAR,Middle Shabelle,Jowhar,MSH,JOW,MSH-JOW,"287,566",10,3,8,27,-1
+Jubaland State,LOWER JUBA,AFMADOW,Lower Juba,Afmadow,LJB,AFM,LJB-AFM,"182,990",21,3,5,13,-1
+Somaliland,SANAG,ERIGAVO,Sanag,Erigavo,SNG,ERI,SNG-ERI,"150,061",38,3,4,7,-1
+Somaliland,GALBEED,GABILEY,Galbeed,Gabiley,WGB,GBL,WGB-GBL,"179,405",45,2,4,5,-1
+Banadir,BANADIR,YAQSHID,Banadir,Yaqshid,BAN,YQA,BAN-YQA,"329,137",1,2,6,314,-1
+South West State,BAY,BURHAKABA,Bay,Burhakaba,BAY,BHB,BAY-BHB,"172,803",58,2,3,3,-1
+Jubaland State,GEDO,LUUQ,Gedo,Luuq,GDO,LUQ,GDO-LUQ,"119,516",17,2,2,10,-1
+Hir-Shabelle State,MIDDLE SHABELLE,BALAD,Middle Shabelle,Balad,MSH,BLD,MSH-BLD,"159,732",63,1,2,2,-1
+Somaliland,TOGDHER,BUHODLE,Togdher,Buhodle,TOG,BUH,TOG-BUH,"82,400",121,1,1,1,-1
+Jubaland State,GEDO,DOLO,Gedo,Dolo,GDO,DLO,GDO-DLO,"85,336",20,1,1,6,-1
+Puntland,MUDUG PL,GOLDOGOB,Mudug PL,Goldogob,MUD,GDB,MUD-GDB,"155,901",16,1,1,4,-1
+Jubaland State,GEDO,BARDERA,Gedo,Bardera,GDO,BRD,GDO-BRD,"172,268",3,1,1,22,-1
+South West State,LOWER SHABELLE,WANLEWEYNE,Lower Shabelle,Wanleweyne,LSH,WLW,LSH-WLW,"319,547",16,0,1,2,-1
+Hir-Shabelle State,MIDDLE SHABELLE,ADALE,Middle Shabelle,Adale,MSH,ADL,MSH-ADL,"35,731",,0,0,,9
+Hir-Shabelle State,MIDDLE SHABELLE,ADEN YABAL,Middle Shabelle,Aden Yabal,MSH,ADY,MSH-ADY,"85,950",,0,0,,9
+Somaliland,TOGDHER,AINABO,Togdher,Ainabo,TOG,ANB,TOG-ANB,"81,380",,0,0,,9
+South West State,LOWER SHABELLE,AWDHEEGLE,Lower Shabelle,Awdheegle,LSH,AWD,LSH-AWD,"166,710",,0,0,,9
+Somaliland,GALBEED,B/GUBADLE,Galbeed,B/Gubadle,WGB,BGB,WGB-BGB,"79,356",,0,0,,9
+Jubaland State,LOWER JUBA,BADADE,Lower Juba,Badade,LJB,BDD,LJB-BDD,"71,364",,0,0,,9
+Somaliland,SANAG,BADAN,Sanag,Badan,SNG,BDN,SNG-BDN,"134,008",0,0,0,1,9
+Somaliland,AWDAL,BAKI,Awdal,Baki,AWL,BKI,AWL-BKI,"55,939",,0,0,,9
+South West State,BAY,BARDALE,Bay,Bardale,BAY,BDL,BAY-BDL,"121,695",,0,0,,9
+Puntland,BARI,BARGAL,Bari,Bargaal,BRI,BAR,BRI-BAR,"29,556",,0,0,,9
+Puntland,KARKAR,BENDER BAYLA,Karkar,Bender Bayla,KRK,BBL,KRK-BBL,"42,436",,0,0,,9
+Jubaland State,MIDDLE JUBA,BUAALE,Middle Juba,Buaale,MJB,BUA,MJB-BUA,"85,890",,0,0,,9
+Jubaland State,GEDO,BURDUBO,Gedo,Burdubo,GDO,BDB,GDO-BDB,"34,083",,0,0,,9
+Puntland,NUGAL,BURTINLE,Nugal,Burtinle,NUG,BRT,NUG-BRT,"110,183",0,0,0,1,9
+Puntland,NUGAL,DANGOROYO,Nugal,Dangoroyo,NUG,DNG,NUG-DNG,"47,800",,0,0,,9
+South West State,BAY,DINSOR,Bay,Dinsor,BAY,DNS,BAY-DNS,"147,033",,0,0,,9
+Somaliland,SANAG,EL AFWEIN,Sanag,El Afwein,SNG,ELF,SNG-ELF,"78,656",,0,0,,9
+South West State,BAKOL,EL BARDE,Bakol,El Barde,BKL,ELB,BKL-ELB,"71,343",,0,0,,9
+Galmudug State,GALGADUD,EL BUR,Galgadud,El Bur,GDD,ELB,GDD-ELB,"91,928",,0,0,,9
+Galmudug State,GALGADUD,EL DHERE,Galgadud,El Dhere,GDD,ELD,GDD-ELD,"89,040",0,0,0,1,9
+Jubaland State,GEDO,EL WAQ,Gedo,El Waq,GDO,ELW,GDO-ELW,"87,596",,0,0,,9
+Galmudug State,GALGADUD,ELGARAS,Galgadud,Elgaras,GDD,ELG,GDD-ELG,"54,750",,0,0,,9
+Puntland,NUGAL,EYL,Nugal,Eyl,NUG,EIL,NUG-EIL,"65,989",,0,0,,9
+Galmudug State,GALGADUD,GALAD,Galgadud,Galad,GDD,GLD,GDD-GLD,"56,840",,0,0,,9
+Galmudug State,GALGADUD,GALHARERI,Galgadud,Galhareri,GDD,GHR,GDD-GHR,"47,457",,0,0,,9
+Galmudug State,GALGADUD,GALINSOR,Galgadud,Galinsor,GDD,GLS,GDD-GLS,"40,366",,0,0,,9
+Jubaland State,GEDO,GEDWEIN,Gedo,Gedwein,GDO,GDW,GDO-GDW,"37,451",,0,0,,9
+Puntland,KARKAR,HAFUN,Karkar,Hafun,KRK,HFN,KRK-HFN,"30,045",,0,0,,9
+Jubaland State,LOWER JUBA,HAGAR,Lower Juba,Hagar,LJB,HGR,LJB-HGR,"50,530",,0,0,,9
+Galmudug State,MUDUG GM,HARA DHERE,Mudug GM,Hara Dhere,MDG,HRD,MDG-HRD,"69,298",,0,0,,9
+Galmudug State,MUDUG GM,HOBYO,Mudug GM,Hobyo,MDG,HOB,MDG-HOB,"159,017",,0,0,,9
+Somaliland,SOOL,HUDUN,Sool,Hudun,SOL,HDN,SOL-HDN,"81,097",,0,0,,9
+Puntland,BARI,ISKUSHUBAN,Bari,Iskushuban,BRI,ISH,BRI-ISH,"50,903",,0,0,,9
+Hir-Shabelle State,HIRAN,JALALAQSI,Hiran,Jalalaqsi,HRN,JLX,HRN-JLX,"54,157",0,0,0,9,9
+Jubaland State,LOWER JUBA,JAMAAME EAST,Lower Juba,Jamaame East,LJB,JME,LJB-JME,"85,715",,0,0,,9
+Jubaland State,LOWER JUBA,JAMAAME WEST,Lower Juba,Jamaame West,LJB,JMW,LJB-JMW,"285,701",,0,0,,9
+Puntland,MUDUG PL,JARIBAN,Mudug PL,Jariban,MUD,JIR,MUD-JIR,"163,358",,0,0,,9
+Jubaland State,MIDDLE JUBA,JILIB EAST,Middle Juba,Jilib East,MJB,JBE,MJB-JBE,"114,035",,0,0,,9
+Jubaland State,LOWER JUBA,JILIB WEST,Lower Juba,Jilib West,LJB,JBE,LJB-JBE,"28,895",,0,0,,9
+South West State,LOWER SHABELLE,KURTUNWAAREY,Lower Shabelle,Kurtunwaarey,LSH,KRT,LSH-KRT,"64,468",,0,0,,9
+Somaliland,AWDAL,LUGHAYA,Awdal,Lughaya,AWL,LUH,AWL-LUH,"60,868",,0,0,,9
+Hir-Shabelle State,MIDDLE SHABELLE,MAHADAY,Middle Shabelle,Mahaday,MSH,MDY,MSH-MDY,"95,533",,0,0,,9
+Hir-Shabelle State,HIRAN,MAHAS,Hiran,Mahas,HRN,MAH,HRN-MAH,"44,738",,0,0,,9
+Hir-Shabelle State,HIRAN,MATABAN,Hiran,Mataban,HRN,MTB,HRN-MTB,"59,508",,0,0,,9
+Somaliland,TOGDHER,OWDWEYNE,Togdher,Owdweyne,TOG,OWD,TOG-OWD,"82,889",,0,0,,9
+Puntland,BARI,QANDALA,Bari,Qandala,BRI,QAN,BRI-QAN,"54,490",,0,0,,9
+South West State,BAY,QANSAH DERE,Bay,Qansah Dere,BAY,QSD,BAY-QSD,"115,329",,0,0,,9
+South West State,LOWER SHABELLE,QORYOLEY,Lower Shabelle,Qoryoley,LSH,QRO,LSH-QRO,"126,546",,0,0,,9
+South West State,BAKOL,RABDURE,Bakol,Rabdure,BKL,RBD,BKL-RBD,"75,638",,0,0,,9
+Hir-Shabelle State,MIDDLE SHABELLE,RAGA ELLE,Middle Shabelle,Raga Elle,MSH,RGE,MSH-RGE,"33,995",,0,0,,9
+Puntland,KARKAR,RAKO,Karkar,Rako,KRK,RKO,KRK-RKO,"30,833",,0,0,,9
+Hir-Shabelle State,MIDDLE SHABELLE,RUNINGOD,Middle Shabelle,Runingod,MSH,RNG,MSH-RNG,"44,340",,0,0,,9
+South West State,LOWER SHABELLE,SABLALE,Lower Shabelle,Sablale,LSH,SBL,LSH-SBL,"63,295",,0,0,,9
+Jubaland State,MIDDLE JUBA,SAKOW,Middle Juba,Sakow,MJB,SKO,MJB-SKO,"94,645",,0,0,,9
+Jubaland State,MIDDLE JUBA,SALAGLE,Middle Juba,Salagle,MJB,SLG,MJB-SLG,"40,465",,0,0,,9
+Somaliland,SAHIL,SHEIKH,Sahil,Sheikh,SAH,SKH,SAH-SKH,"122,616",,0,0,,9
+Somaliland,SOOL,TALEH,Sool,Taleh,SOL,TEL,SOL-TEL,"78,538",,0,0,,9
+South West State,BAKOL,TIEGLO,Bakol,Tieglo,BKL,TGL,BKL-TGL,"84,970",,0,0,,9
+Puntland,BARI,UFEYN,Bari,Ufeyn,BRI,UFN,BRI-UFN,"25,436",,0,0,,9
+South West State,BAKOL,WAJID,Bakol,Wajid,BKL,WJD,BKL-WJD,"75,798",,0,0,,9
+Hir-Shabelle State,MIDDLE SHABELLE,WARSHEIKH,Middle Shabelle,Warsheikh,MSH,WRS,MSH-WRS,"35,195",,0,0,,9

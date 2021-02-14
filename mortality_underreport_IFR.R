@@ -2,15 +2,10 @@
 currentdir_path=dirname(rstudioapi::getSourceEditorContext()$path); setwd(currentdir_path)
 # libraries for population data and country codes
 # load popul data: "pop" has totals, "popF", "popM" by age groups
-data("pop")
-# sum(popF[popF$name %in% "Sudan","2020"] + popM[popM$name %in% "Sudan","2020"]) ==  pop[pop$name %in% "Sudan","2020"]
-sudan_pop_2020=pop[pop$name %in% "Sudan","2020"]*1e3
+data("pop") # sum(popF[popF$name %in% "Sudan","2020"] + popM[popM$name %in% "Sudan","2020"]) ==  pop[pop$name %in% "Sudan","2020"]
+# sudan_pop_2020=pop[pop$name %in% "Sudan","2020"]*1e3
 # sessionInfo()
-# plotting theme
-standard_theme=theme(panel.grid=element_line(linetype="dashed",colour="black",size=0.1),
-                     plot.title=element_text(hjust=0.5,size=16),axis.text.x=element_text(size=9,angle=90),axis.text.y=element_text(size=9),
-                     legend.title=element_text(size=14),legend.text=element_text(size=12),
-                     axis.title=element_text(size=14), text=element_text(family="Calibri"))
+source("covid_LIC_fcns.R")
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### compare expected death toll to reported/modelled --------------------
 library(COVIDCurve) # remotes::install_github("mrc-ide/COVIDCurve")
@@ -36,8 +31,9 @@ subsah_afr_cntrs_iso3n=countrycode(subsah_afr_cntrs_iso3,origin='iso3c',destinat
 # load data from ourworldindata
 # https://covid.ourworldindata.org/data/ecdc/total_cases.csv
 # https://covid.ourworldindata.org/data/ecdc/total_reported_deaths.csv
-total_reported_deaths <- read_csv("https://covid.ourworldindata.org/data/ecdc/total_deaths.csv")
-# few cntr names are different
+total_reported_deaths <- read_csv("https://github.com/owid/covid-19-data/raw/master/public/data/jhu/total_deaths.csv") 
+# https://covid.ourworldindata.org/data/ecdc/total_deaths.csv
+# some cntr names are different
 subsah_afr_cntrs_name[!subsah_afr_cntrs_name %in% colnames(total_reported_deaths)] 
 subsah_afr_cntrs_name[!subsah_afr_cntrs_name %in% colnames(total_reported_deaths)]=
   colnames(total_reported_deaths)[unlist(lapply(c("Ivoire",glob2rx("Democratic*Congo"),"Gambia","Bissau","Swaziland","Tanzania"), 
@@ -54,7 +50,7 @@ subsah_afr_cntrs_total_exp_death=data.frame(country=subsah_afr_cntrs_name,t(sapp
             function(x) {round(sapply(1:3, function(n){1e3*ifr_all_age_groups[,n]%*%agestruct_subsah_afr_cntrs[,x]}))})))
 colnames(subsah_afr_cntrs_total_exp_death)[2:ncol(subsah_afr_cntrs_total_exp_death)]=colnames(ifr_all_age_groups)
 # IFR for a given country
-pop_struct=popF[popF$name %in% "Colombia","2020"] + popM[popM$name %in% "Colombia","2020"]
+cntr_ex="Somalia"; pop_struct=popF[popF$name %in% cntr_ex,"2020"] + popM[popM$name %in% cntr_ex,"2020"]
 # agestruct_subsah_afr_cntrs$Sudan
 1e2*(ifr_all_age_groups$mean %*% pop_struct/sum(pop_struct) )
 # 
@@ -93,7 +89,7 @@ ggplot(total_exp_death_preval_varied[truthvals,]) + geom_line(aes(x=prevalence*1
   xlab('% [prevalence x ascertainment]') + ylab('deaths') + labs(color='expected',linetype='reported') + 
   ggtitle('Expected prevalence using age-dependent IFRs IF no under-reporting')
 # labs(color='data source',linetype='mean') + guides(xintercept=FALSE,linetype=guide_legend(ncol=2))
-ggsave(paste0('covid_simul_output//cumul_deaths_expected_observed',gsub("-","_",Sys.Date()),'.png'),width=36,height=24,units="cm")
+ggsave(paste0('simul_output/underascert/cumul_deaths_expected_observed_',gsub("-","_",Sys.Date()),'.png'),width=36,height=24,units="cm")
 
 # make a plot where mean is the prevalence level where predicted deaths closest to reported by mean IFR,
 # lower CI95 is where it's closest to lower CI95 of IFR, upper ~ ~ ~
@@ -116,7 +112,7 @@ ggplot(best_approx_preval_all,aes(x=country,y=prevalence*1e2,ymin=prevalence_CI_
   xlab('') + ylab('% [prevalence x reporting]') + ggtitle('Best fit prevalence to reported death data (mean IFR +/- CI95)') +
   scale_x_discrete(expand=c(0.03,0))
 # labs(color='data source',shape='data source',linetype='data source') + # guides(linetype=FALSE) +
-ggsave(paste0('covid_simul_output/best_fit_prevalence_range_',gsub("-","_",Sys.Date()),'.png'),width=36,height=20,units="cm")  
+ggsave(paste0('simul_output/underascert/best_fit_prevalence_range_',gsub("-","_",Sys.Date()),'.png'),width=36,height=20,units="cm")  
 
 #### expected IFRs ---------------
 # x="South Africa";pop_struct=popF[popF$name %in% x,"2020"]+popM[popM$name %in% x,"2020"]; 

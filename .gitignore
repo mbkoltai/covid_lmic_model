@@ -13,8 +13,12 @@ sandbox.R
 covidm/
 covid_eco_analysis/
 covid_lmic_v2/
-SDN/
+lmic_cmmid_work/
+SDN_linelist_script/
+somalia_linelist/
+simul_output/
+material/
 total-covid-deaths-region.csv
 latestdata.csv
 latestdata_1e4rows.csv
-
+covid_lmic_grant.txt

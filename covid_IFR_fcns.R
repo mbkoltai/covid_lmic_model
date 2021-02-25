@@ -54,3 +54,4 @@ u_val=fun_lin_approx_agedep_par(min_val=midpoint_susc-depval*delta_susc,max_val=
                                 rep_min_susc,rep_max_susc)
 y_val=fun_lin_approx_agedep_par(midpoint_clinfract-depval*delta_clinfr,midpoint_clinfract+depval*delta_clinfr,
                                 rep_min_clinfr,rep_max_clinfr)
+clinical_fraction=y_val; rm(y_val)

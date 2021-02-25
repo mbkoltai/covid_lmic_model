@@ -394,6 +394,15 @@ fun_onedim_multipar_multicntr_scan=function(cntr_list,year_str,age_groups,scan_p
   attack_rates_multipar_multicntr
 }
 
+### extract process of optimisation
+fcn_extract_optimresults <- function(optim_proc,parnames){
+  optim_outputs=data.frame(gsub("\\s+", " ", optim_proc[which(grepl("BUILD",optim_proc)):(which(grepl("\\$par",optim_proc))-3)]))
+  colnames(optim_outputs)="onecol" # str_replace_all(optim_proc[grepl('\\$',optim_proc)],'\\$','')
+  optim_outputs=optim_outputs %>% separate(col=onecol,into=c("message","count","sse0","sse"),sep=' ') # 
+  optim_outputs[,2:ncol(optim_outputs)]=sapply(optim_outputs[2:ncol(optim_outputs)],as.numeric)
+  optim_outputs
+}
+
 ### parameter scan for multiple parameters and countries (own model) --------------------------------
 # fun_onedim_multipar_multicntr_scan=function(cntr_list,year_str,age_groups,cm_path,scan_param_fullname,n_loop,
 #                                      agedep_param_lims,infect_first_ord_pars,infect_vartype,vartype_list,
@@ -517,42 +526,44 @@ R0_scan
 #     return(list(c(dS,dE,dI_R,dI_D,dR,dD,d_newinfvar,d_beta))) }) }
 
 ### function to run and plot single simul for somalia SIR model -------------
-fcn_somal_sir_singlesimul <- function(sir_varnames,var_categ_list,timesteps,day0,timespan_dates,
-                                      num_params,y_val,seed_size_val,seeding_duration,OxCGRT_input,compliance,N_tot,xlimvals,plot_flag){
-popul_tot=sum(N_tot)
-# num_params=c(betaval,gamma,d_death,IFR_estim)
-# g(betaval,gamma,d_death,IFR_estim) %=% num_params
+fcn_somal_sir_singlesimul <- function(sir_varnames,var_categ_list,timesteps,day0,num_params,clin_fract,
+                                      seed_size_val,seeding_duration,OxCGRT_input,compliance,N_tot,xlimvals,plot_flag){
+popul_tot=sum(N_tot); timespan_dates=OxCGRT_input$date
 betaval=num_params['beta']; gamma=num_params['gamma']; d_death=num_params['d_death']; IFR_estim=num_params['IFR']
+sigma=num_params['sigma']
 initvals_S_I=c(popul_tot,rep(0,length(sir_varnames)-1),betaval/popul_tot); names(initvals_S_I)=c(sir_varnames,"beta_dyn")
 day0_num=as.numeric(day0-timespan_dates[1]); suscept_reduct=1-OxCGRT_input$OxCGRT_scaled
 
-params=list(beta=betaval/popul_tot,gamma=gamma,d_death=d_death,IFR_estim=IFR_estim,seed_size=seed_size_val)
 timesteps<-seq(0,length(OxCGRT_input$OxCGRT_scaled),by=0.25)
-timevar_signal<-data.frame(t=(1:nrow(OxCGRT_input))-1,npi_index=1-suscept_reduct*OxCGRT_input$NPI_on*compliance_val,seeding=0)
+timevar_signal<-data.frame(t=(1:nrow(OxCGRT_input))-1,npi_index=1-suscept_reduct*OxCGRT_input$NPI_on*compliance,seeding=0)
 timevar_signal$seeding[timevar_signal$t %in% day0_num:(day0_num+seeding_duration)]=seed_size_val
-input_npi <- approxfun(timevar_signal[,c("t","npi_index")],method="constant")
-input_seeding <- approxfun(timevar_signal[,c("t","seeding")],method="constant")
+# print(timevar_signal)
+input_npi <- approxfun(timevar_signal[,c("t","npi_index")]) # ,method="constant"
+input_seeding <- approxfun(timevar_signal[,c("t","seeding")]) # ,method="constant"
 ### create ODE object
+params=list(beta=betaval/popul_tot,gamma=gamma,sigma=sigma,d_death=d_death,IFR_estim=IFR_estim,
+            seed_size=seed_size_val,inv_timestep=1/unique(diff(timesteps)))
 simple_sir_somalia_interpol <- function(t,x,parms) {
   S<-x[1]; E<-x[2]; I_R<-x[3]; I_D=x[4]; R=x[5]; D=x[6]; newinfvar=x[7]
   with(as.list(c(x,parms)), {
     beta_variable=beta*input_npi(t);
-    dS=-beta_variable*S*(I_R+I_D); dE=beta_variable*S*(I_R+I_D)-sigma*E + input_seeding(t)*4
+    dS=-beta_variable*S*(I_R+I_D); dE=beta_variable*S*(I_R+I_D)-sigma*E + input_seeding(t)*inv_timestep
     dI_R=(1-IFR_estim)*sigma*E - gamma*I_R; dI_D=IFR_estim*sigma*E - d_death*I_D # infect who'll recover or die
     dR=gamma*I_R; dD=d_death*I_D; d_newinfvar=beta_variable*S*(I_R+I_D); d_beta=0; # if (t<100) {print(c(t,beta_dyn))}
     return(list(c(dS,dE,dI_R,dI_D,dR,dD,d_newinfvar,d_beta))) }) }
 ####
 # RUN
-df_ode_solution <- lsoda(y=initvals_S_I,times=timesteps,func=simple_sir_somalia_interpol,parms=params) %>%
+df_ode_solution <- euler(y=initvals_S_I,times=timesteps,func=simple_sir_somalia_interpol,parms=params) %>%
   # lsoda(y=initvals_S_I,times=timesteps,func=simple_sir_somalia,parms=params,events=list(func=eventfun,time=timesteps)) %>%
   as.data.frame() %>% setNames(var_categ_list$name_vars) %>% filter(t %% 1 ==0) %>% mutate(new_deaths=D-lag(D, default=D[1]),
-  new_infections=newinfvar-lag(newinfvar,default=newinfvar[1]),symptom_cases=(I_R+I_D)*sum((N_tot/sum(N_tot))*y_val)) %>% 
+  new_infections=newinfvar-lag(newinfvar,default=newinfvar[1]),symptom_cases=(I_R+I_D)*sum((N_tot/sum(N_tot))*clin_fract)) %>% 
   select(var_categ_list$sel_vars) %>% pivot_longer(cols=!t) %>% mutate(
   case_death_var=ifelse(name %in% var_categ_list$case_vars,"case","fatal"),
   cumul_trans_var=ifelse(name %in% var_categ_list$cumul_var,"cumul","transient"), 
- state_delta_var=ifelse(name %in% var_categ_list$delta_var,"delta","state"),date=timespan_dates[t+1],name=factor(name,levels=unique(name)),
- introd_date=introd_date_scanvals[introd_date_scanvals==day0],seed_size=seed_size_val,IFR=IFR_estim,
- npi_compliance=compliance,beta=params$beta,seeding_duration=seeding_duration) %>% filter(!(is.na(date) | is.na(value))) #
+ state_delta_var=ifelse(name %in% var_categ_list$delta_var,"delta","state"),
+ date=timespan_dates[t+1],name=factor(name,levels=unique(name)),
+ introd_date=day0,seed_size=seed_size_val,IFR=IFR_estim,
+ npi_compliance=compliance, beta=betaval,seeding_duration=seeding_duration) %>% filter(!(is.na(date) | is.na(value))) #
 #######
 if (nchar(plot_flag)>0){
 p<-ggplot(df_ode_solution, aes(x=date,y=value,group=name,color=name)) + geom_line(aes(linetype=state_delta_var),size=1.25) +
@@ -570,7 +581,64 @@ p<-ggplot(df_ode_solution, aes(x=date,y=value,group=name,color=name)) + geom_lin
 list(df_ode_solution,p)
 }
 
-### progress bar for parallel processing
+### param scan parallel or sequential --------------
+fcn_paramscan_parallel_seq <- function(paral_seq,k_lim,sir_varnames,var_categ_list,timesteps,param_table,transm_pars,y_val,OxCGRT_input,
+                                       N_tot,subpopul,newsurface_weekly){
+  g(d_c,d_e,d_death) %=% transm_pars
+  if (k_lim=="full"){k_lim=nrow(param_table); print(paste0(nrow(param_table)," parsets"))}
+  
+if (grepl("par",paral_seq)){
+  fcn_somal_sir_singlesimul<-.GlobalEnv$fcn_somal_sir_singlesimul
+  df_ode_solution_scan <- foreach(k=1:k_lim,.combine=rbind,.packages=c("tidyr","deSolve","dplyr","RcppRoll")) %dopar% {
+  # RUN & process output
+  temp<-fcn_somal_sir_singlesimul(sir_varnames,var_categ_list,timesteps,param_table$introd_date_scanvals[k],
+  c("beta"=param_table$betaval[k],"gamma"=1/transm_pars[1],"sigma"=1/transm_pars[2],"d_death"=1/transm_pars[3],"IFR"=param_table$IFR[k]),
+  clin_fract=y_val,seed_size_val=param_table$seedsize_scanvals[k],seeding_duration=param_table$seeding_duration[k],
+     OxCGRT_input,compliance=param_table$compliance[k], N_tot*subpopul/sum(N_tot),c(),"")[[1]] %>% 
+     filter(name %in% "new_deaths") %>% select(-any_of(c("case_death_var","cumul_trans_var","state_delta_var"))) %>%
+     mutate(sum_weekly=roll_sum(value,7,fill=NA,align="right")) %>% filter(date %in% newsurface_weekly$date) } 
+} else {
+  df_ode_solution_scan=list()
+  for (k in 1:k_lim) { # nrow(param_table)
+  # RUN & process output
+  df_ode_solution=fcn_somal_sir_singlesimul(sir_varnames,var_categ_list,timesteps,
+            day0=param_table$introd_date_scanvals[k],
+            num_params=c(beta=param_table$betaval[k],gamma=1/d_c,sigma=1/d_e,d_death=1/d_death,IFR=param_table$IFR[k]),clin_fract=y_val,
+            seed_size_val=param_table$seedsize_scanvals[k], seeding_duration=param_table$seeding_duration[k],
+            OxCGRT_input,compliance=param_table$compliance[k], N_tot*mogadishu_popul/sum(N_tot),c(),"")[[1]] %>% 
+    filter(name %in% "new_deaths") %>% select(-any_of(c("case_death_var","cumul_trans_var","state_delta_var"))) %>%
+    mutate(sum_weekly=roll_sum(value,7,fill=NA,align="right")) %>% filter(date %in% newsurface_weekly$date)
+  df_ode_solution_scan[[k]]=df_ode_solution 
+  # print progress
+  if (k %% 10 == 0) {print(paste0(k,",",round(k/k_lim,3)*1e2,"%, ",
+                           paste0(c("params:",as.character(param_table[k,])),collapse=" ")))}
+  }
+  df_ode_solution_scan=bind_rows(df_ode_solution_scan, .id = "column_label")  
+}
+  df_ode_solution_scan
+}
+
+### SEIR model with dynamic deaths ----------------------
+seir_deaths_npi_interpol <- function(t,x,parms) {
+  S<-x[1]; E<-x[2]; I_R<-x[3]; I_D=x[4]; D=x[5] # ; npi_val=x[6]
+  gamma=0.2866; sigma=0.2503; d_death=1/21; inv_timestep=1/0.25; popul=2.2e6
+  with(as.list(c(x,parms)), {
+    beta_variable=(beta/popul)*(1-input_npi(t)*npi_compl)
+    dS=-beta_variable*S*(I_R+I_D); dE=beta_variable*S*(I_R+I_D)-sigma*E + input_seeding(t)*seed_size*inv_timestep
+    dI_R=(1-IFR_estim)*sigma*E - gamma*I_R; dI_D=IFR_estim*sigma*E-d_death*I_D; dD=d_death*I_D # infect who'll recover or die
+    # print(c(t,1-input_npi(t)*npi_compl))
+    return(list(c(dS,dE,dI_R,dI_D,dD))) }) } # dR=gamma*I_R
+
+
+### object size -------------- 
+fcn_objs_mem_use <- function(min_size){
+  mem_use_df=round(data.frame(unlist(sapply(ls(envir=.GlobalEnv), function(n) object.size(get(n)), simplify = FALSE)))/1e6,1)
+  colnames(mem_use_df)[1]<-"size (Mb)"; mem_use_df[,"objs"]=rownames(mem_use_df)
+  mem_use_df<-mem_use_df[order(mem_use_df$size,decreasing=T),]; rownames(mem_use_df)<-c()
+  mem_use_df[mem_use_df$size>min_size,c(2,1)]
+}
+
+### progress bar for parallel processing --------------
 f_progress <- function(){
   pb <- txtProgressBar(min=1, max=n-1,style=3); count <- 0
   function(...) {

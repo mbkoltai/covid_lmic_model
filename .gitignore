@@ -18,6 +18,7 @@ SDN_linelist_script/
 somalia_linelist/
 simul_output/
 material/
+bayesian/
 total-covid-deaths-region.csv
 latestdata.csv
 latestdata_1e4rows.csv

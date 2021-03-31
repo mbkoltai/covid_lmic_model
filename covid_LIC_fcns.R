@@ -527,108 +527,218 @@ R0_scan
 
 ### function to run and plot single simul for somalia SIR model -------------
 fcn_somal_sir_singlesimul <- function(sir_varnames,var_categ_list,timesteps,day0,num_params,clin_fract,
-                                      seed_size_val,seeding_duration,OxCGRT_input,compliance,N_tot,xlimvals,plot_flag){
-popul_tot=sum(N_tot); timespan_dates=OxCGRT_input$date
-betaval=num_params['beta']; gamma=num_params['gamma']; d_death=num_params['d_death']; IFR_estim=num_params['IFR']
-sigma=num_params['sigma']
-initvals_S_I=c(popul_tot,rep(0,length(sir_varnames)-1),betaval/popul_tot); names(initvals_S_I)=c(sir_varnames,"beta_dyn")
-day0_num=as.numeric(day0-timespan_dates[1]); suscept_reduct=1-OxCGRT_input$OxCGRT_scaled
-
-timesteps<-seq(0,length(OxCGRT_input$OxCGRT_scaled),by=0.25)
-timevar_signal<-data.frame(t=(1:nrow(OxCGRT_input))-1,npi_index=1-suscept_reduct*OxCGRT_input$NPI_on*compliance,seeding=0)
-timevar_signal$seeding[timevar_signal$t %in% day0_num:(day0_num+seeding_duration)]=seed_size_val
-# print(timevar_signal)
-input_npi <- approxfun(timevar_signal[,c("t","npi_index")]) # ,method="constant"
-input_seeding <- approxfun(timevar_signal[,c("t","seeding")]) # ,method="constant"
-### create ODE object
-params=list(beta=betaval/popul_tot,gamma=gamma,sigma=sigma,d_death=d_death,IFR_estim=IFR_estim,
-            seed_size=seed_size_val,inv_timestep=1/unique(diff(timesteps)))
-simple_sir_somalia_interpol <- function(t,x,parms) {
-  S<-x[1]; E<-x[2]; I_R<-x[3]; I_D=x[4]; R=x[5]; D=x[6]; newinfvar=x[7]
-  with(as.list(c(x,parms)), {
-    beta_variable=beta*input_npi(t);
-    dS=-beta_variable*S*(I_R+I_D); dE=beta_variable*S*(I_R+I_D)-sigma*E + input_seeding(t)*inv_timestep
-    dI_R=(1-IFR_estim)*sigma*E - gamma*I_R; dI_D=IFR_estim*sigma*E - d_death*I_D # infect who'll recover or die
-    dR=gamma*I_R; dD=d_death*I_D; d_newinfvar=beta_variable*S*(I_R+I_D); d_beta=0; # if (t<100) {print(c(t,beta_dyn))}
-    return(list(c(dS,dE,dI_R,dI_D,dR,dD,d_newinfvar,d_beta))) }) }
-####
-# RUN
-df_ode_solution <- euler(y=initvals_S_I,times=timesteps,func=simple_sir_somalia_interpol,parms=params) %>%
-  # lsoda(y=initvals_S_I,times=timesteps,func=simple_sir_somalia,parms=params,events=list(func=eventfun,time=timesteps)) %>%
-  as.data.frame() %>% setNames(var_categ_list$name_vars) %>% filter(t %% 1 ==0) %>% mutate(new_deaths=D-lag(D, default=D[1]),
-  new_infections=newinfvar-lag(newinfvar,default=newinfvar[1]),symptom_cases=(I_R+I_D)*sum((N_tot/sum(N_tot))*clin_fract)) %>% 
-  select(var_categ_list$sel_vars) %>% pivot_longer(cols=!t) %>% mutate(
-  case_death_var=ifelse(name %in% var_categ_list$case_vars,"case","fatal"),
-  cumul_trans_var=ifelse(name %in% var_categ_list$cumul_var,"cumul","transient"), 
- state_delta_var=ifelse(name %in% var_categ_list$delta_var,"delta","state"),
- date=timespan_dates[t+1],name=factor(name,levels=unique(name)),
- introd_date=day0,seed_size=seed_size_val,IFR=IFR_estim,
- npi_compliance=compliance, beta=betaval,seeding_duration=seeding_duration) %>% filter(!(is.na(date) | is.na(value))) #
-#######
-if (nchar(plot_flag)>0){
-p<-ggplot(df_ode_solution, aes(x=date,y=value,group=name,color=name)) + geom_line(aes(linetype=state_delta_var),size=1.25) +
-   scale_linetype_manual(values=c("twodash","solid")) + facet_wrap(cumul_trans_var~case_death_var,scales="free",ncol=2) +
-   theme_bw() + standard_theme + theme(legend.position="top") + 
-  geom_vline(xintercept=as.Date(day0),color="red") + 
-  geom_vline(xintercept=as.Date(OxCGRT_input$date[min(which(OxCGRT_input$NPI_on>0))]),color="green") + 
-   scale_x_date(date_breaks="2 weeks",limits=c(timespan_dates[xlimvals[1]],timespan_dates[xlimvals[2]])) + 
-   xlab('time (days)') + ylab(('# cases')) + labs(linetype="variables",color="variables") +
+                                      seed_size_val,seeding_duration,NPI_input,compliance,popul_age_struct,xlimvals,plot_flag){
+  popul_tot=sum(popul_age_struct); timespan_dates=NPI_input$date
+  betaval=num_params['beta']; gamma=num_params['gamma']; IFR_estim=num_params['IFR']; sigma=num_params['sigma']
+  initvals_S_I=c(popul_tot,rep(0,length(sir_varnames)-1),betaval/popul_tot); names(initvals_S_I)=c(sir_varnames,"beta_dyn")
+  day0_num=as.numeric(day0-timespan_dates[1]); suscept_reduct=1-NPI_input$OxCGRT_scaled
+  
+  timesteps<-seq(0,length(NPI_input$OxCGRT_scaled),by=0.25)
+  timevar_signal<-data.frame(t=(1:nrow(NPI_input))-1,npi_index=1-suscept_reduct*NPI_input$NPI_on*compliance,seeding=0)
+  timevar_signal$seeding[timevar_signal$t %in% day0_num:(day0_num+seeding_duration)]=seed_size_val
+  # print(timevar_signal)
+  input_npi <- approxfun(timevar_signal[,c("t","npi_index")]) # ,method="constant"
+  input_seeding <- approxfun(timevar_signal[,c("t","seeding")]) # ,method="constant"
+  ### create ODE object
+  params=list(beta=betaval/popul_tot,gamma=gamma,sigma=sigma,delta=num_params['d_death'],IFR_estim=IFR_estim,
+              seed_size=seed_size_val,inv_timestep=1/unique(diff(timesteps)))
+  
+  simple_sir_somalia_interpol <- function(t,x,parms) {
+    S<-x[1]; E<-x[2]; I_R<-x[3]; I_D=x[4]; R=x[5]; D=x[6]; newinfvar=x[7]
+    with(as.list(c(x,parms)), {
+      beta_variable=beta*input_npi(t);
+      dS=-beta_variable*S*(I_R+I_D); dE=beta_variable*S*(I_R+I_D)-sigma*E + input_seeding(t)*inv_timestep
+      dI_R=(1-IFR_estim)*sigma*E - gamma*I_R; dI_D=IFR_estim*sigma*E - delta*I_D # infect who'll recover or die
+      dR=gamma*I_R; dD=delta*I_D; d_newinfvar=beta_variable*S*(I_R+I_D); d_beta=0; # if (t<100) {print(c(t,beta_dyn))}
+      return(list(c(dS,dE,dI_R,dI_D,dR,dD,d_newinfvar,d_beta))) }) }
+  
+  ####
+  # RUN
+  df_ode_solution <- euler(y=initvals_S_I,times=timesteps,func=simple_sir_somalia_interpol,parms=params) %>%
+    as.data.frame() %>% setNames(var_categ_list$name_vars) %>% filter(t %% 1 ==0) %>% mutate(new_deaths=D-lag(D, default=D[1]),
+    new_infections=newinfvar-lag(newinfvar,default=newinfvar[1]),
+    symptom_cases=(I_R+I_D)*sum((popul_age_struct/sum(popul_age_struct))*clin_fract)) %>% 
+    select(var_categ_list$sel_vars) %>% pivot_longer(cols=!t) %>%
+    mutate(case_death_var=ifelse(name %in% var_categ_list$case_vars,"case","fatal"),
+      cumul_trans_var=ifelse(name %in% var_categ_list$cumul_var,"cumul","transient"),
+      state_delta_var=ifelse(name %in% var_categ_list$delta_var,"delta","state"),
+      date=timespan_dates[t+1],name=factor(name,levels=unique(name)), 
+      introd_date=day0,seed_size=seed_size_val,IFR=IFR_estim,npi_compliance=compliance,beta=betaval,seeding_duration=seeding_duration) %>% 
+      filter(!(is.na(date) | is.na(value)))
+  #######
+  if (nchar(plot_flag)>0){ df_plot = df_ode_solution %>% 
+    mutate(case_death_var_spec=ifelse((case_death_var %in% "case")|(cumul_trans_var %in% "cumul"),
+                                      paste0(case_death_var," (%)"),paste0(case_death_var," (number)")),
+           value_abs_fract_cond=ifelse((case_death_var %in% "case")|(cumul_trans_var %in% "cumul"),100*value/popul_tot,value))
+  
+  p<-ggplot(df_plot, aes(x=date,y=value_abs_fract_cond,group=name,color=name)) + geom_line(aes(linetype=state_delta_var),size=1.25) +
+    scale_linetype_manual(values=c("twodash","solid")) + facet_wrap(cumul_trans_var~case_death_var_spec,scales="free",ncol=2) +
+    theme_bw() + standard_theme + theme(legend.position="top") + geom_vline(xintercept=as.Date(day0),color="red") + 
+    geom_vline(xintercept=as.Date(NPI_input$date[min(which(NPI_input$NPI_on>0))]),color="green") + 
+    scale_x_date(date_breaks="2 weeks",expand=expansion(0.01,0)) + xlab('time (days)') + ylab(('# cases')) + 
+    labs(linetype="variables",color="variables") + 
     labs(title=paste('SIR model, introduction date:',unique(df_ode_solution$introd_date), ", initial import (E):",seed_size_val),
-      subtitle=paste0("beta=",betaval,", compliance=",compliance) )} else {
-     p<-c()
-   }
+         subtitle=paste0("R0=",round(betaval*((1-IFR_estim)/num_params['gamma'] + IFR_estim/num_params['d_death']),2),
+                         ", compliance=",compliance) )} else {p<-c()}
+  
+  list(df_ode_solution,p)
+}
 
-list(df_ode_solution,p)
+### calc R0 ----------------------
+fcn_calc_R0 <- function(beta,ddeath,drecov,IFR){ beta*((1-IFR)/drecov + IFR/ddeath) }
+
+### calc attack rate and cumul death rate ----------------------
+fcn_attack_death_rate <- function(df,plot_flag,y_breaks_lims){
+  df_output = subset(df,t %in% c(min(t),max(t)) & cumul_trans_var=="cumul")[,1:3] %>% 
+    pivot_wider(names_from=c(name),values_from=value) %>% mutate(attack_rate=c(0,sum(c(R[t==max(t)],D[t==max(t)]))/S[t==min(t)]),
+                                                                 cumul_death_rate=c(0,D[t==max(t)]/S[t==min(t)]))
+  if (plot_flag=="plot"){
+  ggplot(subset(df_output,t==max(t)) %>% select(t,attack_rate,cumul_death_rate) %>% 
+    pivot_longer(cols=c(attack_rate,cumul_death_rate))) + geom_segment(aes(x=0,xend=0+1,y=value*1e2,yend=value*1e2,color=name),size=2) +
+    theme_bw() + standard_theme + scale_x_continuous(breaks=NULL) + xlab("") + ylab("%") + labs(color="") +
+    scale_y_log10(breaks=y_breaks_lims[[1]],limits=y_breaks_lims[[2]]) + geom_text(aes(y=1.1*value*1e2,label=round(value*1e2,2)),x=0.5) }
+  else if (grepl("calc",plot_flag)){df_output} else {print("choose <calc> or <plot>")}
+}
+
+### plot single simul vs data -----------------
+fcn_plot_singlesim_data_rmse_deaths <- function(df,out_bdr_daily_estimates,baselineburialrate,
+                                                death_rate_percap,n_per_persday,popul,plot_flag){
+  scale_factor=baselineburialrate/(death_rate_percap*popul/n_per_persday)
+  # rmse
+  singlesim_comp=left_join(subset(df,name %in% "new_deaths")[,c("date","value")] %>% rename(value_simul=value) %>% 
+      mutate(value_simul=value_simul) %>% mutate(value_simul_scaled=value_simul*scale_factor), # round(
+      out_bdr_daily_estimates[,c("date","rollmeanweek")] %>% rename(value_data=rollmeanweek) %>% 
+      mutate(value_data=value_data),by="date") %>% mutate(sq_error=(value_data-value_simul_scaled)^2) %>% filter(!is.na(value_data))
+  rmse=sqrt(mean(singlesim_comp$sq_error))
+  
+  if (nchar(plot_flag)==0){rmse } else {
+  ggplot(singlesim_comp[,c("date","value_simul_scaled","value_data")] %>% pivot_longer(col=!date),aes(x=date,y=value,color=name)) + 
+    geom_line() + geom_point() + scale_x_date(date_breaks="1 week",expand=expansion(0.01,0)) + scale_y_continuous(expand=expansion(0.01,0)) + 
+    theme_bw() + standard_theme + ggtitle(paste0("RMSE=",round(rmse,2)))}
+}
+
+### plot peak dates cases vs deaths of single simul --------------
+fcn_plot_peakdates <- function(df_plot,datelims){
+  peak_dates=subset(df_plot[[1]],name %in% c("new_infections","new_deaths")) %>% group_by(name) %>% 
+    summarise(maxval_date=date[value==max(value,na.rm=T)])
+  ggplot(subset(df_plot[[1]], name %in% c("new_infections","new_deaths")),aes(x=date,y=value,group=name,color=name)) + geom_line() +
+    geom_point() + scale_x_date(limits=as.Date(datelims),date_breaks="1 week",expand=expansion(0.01,0)) + scale_y_log10() +
+    geom_vline(data=peak_dates,aes(xintercept=maxval_date,color=name)) + labs(color="peak of infections/deaths") + 
+    theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5))
+}
+
+### best paramsets  --------------
+fcn_best_paramsets <- function(dferrors,paramtable,threshold,partype)  {
+  if (grepl("numer",partype)){
+  best_parsets=left_join(dferrors %>% rename(err_type=name,error=value) %>% group_by(CDR,err_type) %>% 
+        filter(error<quantile(error,threshold)), paramtable %>% rowid_to_column(var="parset_ID") %>% 
+        select(-c(seedsize_scanvals,introd_date_scanvals)),by="parset_ID") %>% 
+  mutate(R0=betaval*((1-IFR)*d_c+IFR*d_death),IFR=1e2*IFR,compliance=1e2*compliance) %>% pivot_longer(cols=-c(parset_ID,err_type,error,CDR))
+    list(best_parsets,best_parsets  %>% group_by(err_type,CDR,name) %>% 
+           summarise(meanval=mean(value),medianval=median(value),minval=min(value),maxval=max(value)) )
+    } else {
+  # dates # best_paramsets_dates=
+  best_parsets= left_join(error_pred_data_comp %>% rename(err_type=name,error=value) %>% group_by(CDR,err_type) %>% 
+      filter(error<quantile(error,threshold)),paramtable %>% rowid_to_column(var="parset_ID") %>% 
+      select(-c(seedsize_scanvals,betaval,IFR,compliance)),by="parset_ID") %>% pivot_longer(cols=-c(parset_ID,err_type,error,CDR)) 
+  list(best_parsets,
+  best_parsets %>% group_by(err_type,CDR,name) %>% 
+    summarise(meanval=mean(value),medianval=median(value),minval=min(value),maxval=max(value)) %>% mutate(name="date of introduction"))
+      }
+}
+
+### plot best trajs together with data
+fcn_plot_best_fits <- function(dfplot,df_data,OxCGRTinput,seeddur,baselineburial,CDRval,CDR_metric,plotdatelims,popul,geomtext_vals,
+                               ylimval,sizelimval,dc,ddeath,title_str,colorpal){
+  scalefactor=baselineburial/(popul*CDRval/CDR_metric) # err_type
+  min_error_vals=dfplot %>% group_by(introd_date_scanvals) %>% filter(value_error==min(value_error,na.rm=T)) %>% 
+    summarise(compliance=unique(compliance),R0=unique(R0),min_error=min(value_error,na.rm=T),IFR=unique(IFR))
+
+ggplot(subset(dfplot,date>=plotdatelims[1] & date<plotdatelims[2])) + 
+  geom_line(aes(x=date,y=value*scalefactor,group=R0,color=R0,size=best_score)) + # ,alpha=best_score/max(best_score)
+  geom_line(data=subset(df_data,date<=max(dfplot$date)),aes(x=date,y=new_graves_best_ipol-baselineburial),
+            color="black",linetype="dashed",size=0.25) +
+  geom_line(data=subset(df_data,date<=max(dfplot$date)),aes(x=date,y=rollmeanweek),color="black") +
+  facet_wrap(~introd_date_scanvals,scales="free") + 
+  theme_bw() + standard_theme + theme(axis.text.x=element_text(size=7),axis.text.y=element_text(size=8)) + 
+  geom_vline(aes(xintercept=introd_date_scanvals),color="red") +
+  geom_vline(xintercept=as.Date(min(subset(OxCGRTinput,NPI_on>0)$date)),color="green") +
+  scale_size_continuous(limits=c(min(df_plot$best_score),sizelimval)) + scale_color_gradientn(colours=colorpal) +
+  scale_x_date(date_breaks="2 weeks",expand=expansion(0,0),limits=plotdatelims) +
+  scale_y_continuous(expand=expansion(0.01,0),limits=c(0,ylimval)) + xlab('time (days)') + 
+  ylab('deaths/day above baseline') + labs(title=title_str,subtitle=paste0("CDR=",CDRval,", seeding duration=",seeddur,
+        ", error=",unique(dfplot$name_error)), color="R0") + guides(size=FALSE) + 
+  geom_text(data=min_error_vals,aes(label=paste0("error (best)=",round(min_error,max(2-round(log10(min_error)),0)),", compl=",compliance,
+                      ",\nR0=",R0,",IFR=",IFR*1e2,"%"),x=geomtext_vals[[1]],y=ylimval*geomtext_vals[[2]]),size=3,hjust=0)
 }
 
 ### param scan parallel or sequential --------------
-fcn_paramscan_parallel_seq <- function(paral_seq,k_lim,sir_varnames,var_categ_list,timesteps,param_table,transm_pars,y_val,OxCGRT_input,
-                                       N_tot,subpopul,newsurface_weekly){
-  g(d_c,d_e,d_death) %=% transm_pars
-  if (k_lim=="full"){k_lim=nrow(param_table); print(paste0(nrow(param_table)," parsets"))}
+fcn_paramscan_parallel_seq <- function(paral_seq,k_lim,sir_varnames,var_categ_list,timesteps,paramtable,transm_pars,clinfract,OxCGRT_input,
+                                       N_tot,subpopul,filterdates,parnames_number){
+  g(d_c,d_e,d_death,seed_dur) %=% transm_pars
+  if (k_lim=="full"){k_lim=nrow(paramtable); print(paste0(nrow(paramtable)," parsets"))}
   
-if (grepl("par",paral_seq)){
-  fcn_somal_sir_singlesimul<-.GlobalEnv$fcn_somal_sir_singlesimul
-  df_ode_solution_scan <- foreach(k=1:k_lim,.combine=rbind,.packages=c("tidyr","deSolve","dplyr","RcppRoll")) %dopar% {
-  # RUN & process output
-  temp<-fcn_somal_sir_singlesimul(sir_varnames,var_categ_list,timesteps,param_table$introd_date_scanvals[k],
-  c("beta"=param_table$betaval[k],"gamma"=1/transm_pars[1],"sigma"=1/transm_pars[2],"d_death"=1/transm_pars[3],"IFR"=param_table$IFR[k]),
-  clin_fract=y_val,seed_size_val=param_table$seedsize_scanvals[k],seeding_duration=param_table$seeding_duration[k],
-     OxCGRT_input,compliance=param_table$compliance[k], N_tot*subpopul/sum(N_tot),c(),"")[[1]] %>% 
-     filter(name %in% "new_deaths") %>% select(-any_of(c("case_death_var","cumul_trans_var","state_delta_var"))) %>%
-     mutate(sum_weekly=roll_sum(value,7,fill=NA,align="right")) %>% filter(date %in% newsurface_weekly$date) } 
-} else {
-  df_ode_solution_scan=list()
-  for (k in 1:k_lim) { # nrow(param_table)
-  # RUN & process output
-  df_ode_solution=fcn_somal_sir_singlesimul(sir_varnames,var_categ_list,timesteps,
-            day0=param_table$introd_date_scanvals[k],
-            num_params=c(beta=param_table$betaval[k],gamma=1/d_c,sigma=1/d_e,d_death=1/d_death,IFR=param_table$IFR[k]),clin_fract=y_val,
-            seed_size_val=param_table$seedsize_scanvals[k], seeding_duration=param_table$seeding_duration[k],
-            OxCGRT_input,compliance=param_table$compliance[k], N_tot*mogadishu_popul/sum(N_tot),c(),"")[[1]] %>% 
-    filter(name %in% "new_deaths") %>% select(-any_of(c("case_death_var","cumul_trans_var","state_delta_var"))) %>%
-    mutate(sum_weekly=roll_sum(value,7,fill=NA,align="right")) %>% filter(date %in% newsurface_weekly$date)
-  df_ode_solution_scan[[k]]=df_ode_solution 
-  # print progress
-  if (k %% 10 == 0) {print(paste0(k,",",round(k/k_lim,3)*1e2,"%, ",
-                           paste0(c("params:",as.character(param_table[k,])),collapse=" ")))}
+  if (grepl("par",paral_seq)){
+    fcn_somal_sir_singlesimul<-.GlobalEnv$fcn_somal_sir_singlesimul
+    df_output <- foreach(k=1:k_lim,.combine=rbind,.packages=c("tidyr","deSolve","dplyr","RcppRoll")) %dopar% {
+      # RUN & process output
+      temp<-fcn_somal_sir_singlesimul(sir_varnames,var_categ_list,timesteps,paramtable$introd_date_scanvals[k],
+                             c("beta"=paramtable$betaval[k],"gamma"=1/d_c,"sigma"=1/d_e,"d_death"=1/d_death,"IFR"=paramtable$IFR[k]), 
+                             "clin_fract"=clinfract,"seed_size_val"=paramtable$seedsize_scanvals[k],"seeding_duration"=seed_dur,
+                             OxCGRT_input,compliance=paramtable$compliance[k], subpopul*N_tot/sum(N_tot),c(),"")[[1]] %>% 
+        filter(name %in% "new_deaths") %>% select(-any_of(c("case_death_var","cumul_trans_var","state_delta_var","introd_date",
+        "seed_size","IFR","npi_compliance","beta","seeding_duration"))) %>% filter(date %in% filterdates) %>% mutate(parset_ID=k)
+    }
+  } else {
+    df_output=list()
+    for (k in 1:k_lim) { # nrow(paramtable)
+      # RUN & process output
+  df_ode_solution=fcn_somal_sir_singlesimul(sir_varnames,var_categ_list,timesteps,day0=paramtable$introd_date_scanvals[k],
+    num_params=c(beta=paramtable$betaval[k],gamma=1/d_c,sigma=1/d_e,d_death=1/d_death,IFR=paramtable$IFR[k]),
+    clin_fract=clinfract,seed_size_val=paramtable$seedsize_scanvals[k],seeding_duration=transm_pars["seeding_duration"],
+    OxCGRT_input,compliance=paramtable$compliance[k], N_tot*mogadishu_popul/sum(N_tot),c(),"")[[1]] %>% filter(name %in% "new_deaths") %>%
+    select(-any_of(c("case_death_var","cumul_trans_var","state_delta_var","introd_date","seed_size","IFR","npi_compliance","beta",
+                     "seeding_duration"))) %>% filter(date %in% filterdates) %>% mutate(parset_ID=k)
+    df_output[[k]]=df_ode_solution 
+      # print progress
+      if (k %% 10 == 0) {print(paste0(k,",",round(k/k_lim,3)*1e2,"%, ",
+                                      paste0(c("params:",as.character(paramtable[k,])),collapse=" ")))}
+    }
+    df_output=bind_rows(df_output, .id="column_label") 
+    # %>% mutate(parset_ID=group_indices(df_output,.dots=parnames_number)) # datasource="model",
   }
-  df_ode_solution_scan=bind_rows(df_ode_solution_scan, .id = "column_label")  
-}
-  df_ode_solution_scan
+  n_parcol=which(colnames(df_output) %in% "introd_date") 
+  df_output # %>% mutate(parset_ID=group_indices(df_output,.dots=parnames_number))
 }
 
-### SEIR model with dynamic deaths ----------------------
-seir_deaths_npi_interpol <- function(t,x,parms) {
-  S<-x[1]; E<-x[2]; I_R<-x[3]; I_D=x[4]; D=x[5] # ; npi_val=x[6]
-  gamma=0.2866; sigma=0.2503; d_death=1/21; inv_timestep=1/0.25; popul=2.2e6
-  with(as.list(c(x,parms)), {
-    beta_variable=(beta/popul)*(1-input_npi(t)*npi_compl)
-    dS=-beta_variable*S*(I_R+I_D); dE=beta_variable*S*(I_R+I_D)-sigma*E + input_seeding(t)*seed_size*inv_timestep
-    dI_R=(1-IFR_estim)*sigma*E - gamma*I_R; dI_D=IFR_estim*sigma*E-d_death*I_D; dD=d_death*I_D # infect who'll recover or die
-    # print(c(t,1-input_npi(t)*npi_compl))
-    return(list(c(dS,dE,dI_R,dI_D,dD))) }) } # dR=gamma*I_R
-
+### ### ### ### ### ### ### ### ### ### ### ###
+### heatmap of MSE ------------------------
+# PLOT
+# err_type="negbinom"; n_text=2; n_round=0
+# for (k in 1:length(scan_params$IFR)){
+# df_heatmap=subset(error_pred_data_comp,IFR==scan_params$IFR[k] & grepl(err_type,name)) #  & beta==scan_params$betaval[2]
+# colnames(df_heatmap)[grepl("npi",colnames(df_heatmap))]="npi_c"; colnames(df_heatmap)[grepl("durat",colnames(df_heatmap))]="seed_t"
+# # best 1% param sets
+# # minval_mse=min(subset(error_pred_data_comp,grepl(err_type,name))[,"value"]) 
+# min_error_limit=10^(floor(log10(sort(subset(error_pred_data_comp,grepl(err_type,name))$value)[round(0.01*nrow(error_pred_data_comp))])*10)/10 )
+# hmap_lims=summary(subset(error_pred_data_comp,grepl(err_type,name) & !is.infinite(value))$value)[c("Min.","Median","Max.")]*c(0.9,1,1.1)
+# highl_tiles=subset(df_heatmap, value<min_error_limit) # %>% select(introd_date,seed_size) # midpoint_val=2*min(df_heatmap$value)
+# # PLOT
+# ggplot(df_heatmap, aes(x=seed_size,y=introd_date,fill=value)) + geom_tile(color="black") + 
+#  geom_text(aes(label=round(value,n_round)),color="black",size=n_text) + geom_rect(data=highl_tiles,size=1,fill=NA,colour="green",
+#   aes(xmin=seed_size-unique(diff(scan_params$seedsize_scanvals))/2,xmax=seed_size+unique(diff(scan_params$seedsize_scanvals))/2,
+#   ymin=introd_date-unique(diff(scan_params$introd_date_scanvals))/2,ymax=introd_date+unique(diff(scan_params$introd_date_scanvals))/2)) +
+#   theme_bw() + standard_theme + theme(axis.text.y=element_text(size=6)) + 
+#   scale_fill_gradientn(colors=c("blue","white","red"),values=scales::rescale(array(hmap_lims))) + #,limits=c(0,hmap_lims[3]) 
+#   facet_grid(npi_c~seed_t~beta,labeller=labeller(npi_c=label_both,seed_t=label_both,beta=label_both)) + 
+#   scale_y_date(breaks=unique(df_heatmap$introd_date),expand=c(0,0)) + scale_x_continuous(breaks=unique(df_heatmap$seed_size),expand=c(0,0)) +
+#   labs(title="Error for grid search",subtitle=paste0("IFR=",unique(df_heatmap$IFR)*100,"%, error: ",
+#   gsub(gsub(err_type,"poiss","NLL, poisson"),"negbinom","NLL, neg.binom."))) + xlab("seed size") + ylab("introd. date")
+# # SAVE
+# filetag=paste0("IFR_",1e2*unique(df_heatmap$IFR),"_error_",err_type) 
+# ggsave(paste0("simul_output/somalia_output/errors/error_parscan_SIR_heatmap_",filetag,".png"),width=32,height=40,units="cm")
+# print(k)
+# }
 
 ### object size -------------- 
 fcn_objs_mem_use <- function(min_size){

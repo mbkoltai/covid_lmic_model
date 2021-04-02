@@ -16,14 +16,14 @@ lapply(c("tidyverse","deSolve","qs","gtools","rstudioapi","wpp2019","countrycode
          "RcppRoll","scales","dttr2","wpp2019","foreach","parallel","doParallel"), library,character.only=TRUE)
 cm_path="~/Desktop/research/models/epid_models/covid_model/lmic_model/covidm/"
 # functions and plotting theme
-source("covid_LIC_fcns.R"); source("covid_IFR_fcns.R")
+source("covid_LIC_fcns.R")
 
 ### JHU global covid19 data ----------------
 #' ## JHU global covid19 data
 data("coronavirus")
-#' data for somalia
-N_tot=fun_cntr_agestr("Somalia",i_year="2020",
-                      age_groups=data.frame(age_group=c(1:16),age_low=c(seq(0,75,5)),age_high=c(seq(4,74,5),100)))
+# age structure
+N_tot=fun_cntr_agestr("Somalia",i_year="2020",age_groups=data.frame(age_group=c(1:16),age_low=c(seq(0,75,5)),age_high=c(seq(4,74,5),100)))
+# reported case and deaths data
 covid_somal=coronavirus %>% filter(country %in% "Somalia") %>% mutate(rollingmean=roll_mean(cases,7,align="center", fill=NA)) %>%
   mutate(per_million=rollingmean/(sum(N_tot)/1e6),name=str_replace(type,"confirmed","confirmed cases")) %>% rename(value=cases)
 
@@ -41,6 +41,7 @@ covid_somal=coronavirus %>% filter(country %in% "Somalia") %>% mutate(rollingmea
 # ggsave(tcourse_filename,width=30,height=18,units="cm") # _dots
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### SATELLITE DATA on cemeteries ----------------
 #' satellite image data
 out_bdr_daily_estimates=read_csv("somalia_linelist/Mogadishu_data/mogadishu_burial_analysis-main/out_bdr_daily_estimates.csv")
@@ -49,27 +50,26 @@ baseline_daily_burials=mean(subset(out_bdr_daily_estimates,date>="2019-10-01" & 
 # subset for relevant period and columns
 out_bdr_daily_estimates=subset(out_bdr_daily_estimates[!rowSums(is.na(out_bdr_daily_estimates))==(ncol(out_bdr_daily_estimates)-1),
         !colSums(is.na(out_bdr_daily_estimates))==nrow(out_bdr_daily_estimates)],date>"2019-10-14" & date<max(date-7)) %>% #  & 
-  # rolling mean BASELINE subtracted
-  mutate(rollmeanweek=roll_mean(new_graves_best_ipol-baseline_daily_burials,7,align="center", fill=NA),
-         rollsumweek=roll_sum(new_graves_best_ipol-baseline_daily_burials,7,align="left",fill=NA))
+  mutate(daily_baseline_subtr=new_graves_best_ipol- baseline_daily_burials,   # rolling mean BASELINE subtracted
+      rollmeanweek=roll_mean(new_graves_best_ipol-baseline_daily_burials,7,align="center", fill=NA),
+      rollsumweek=roll_sum(new_graves_best_ipol-baseline_daily_burials,7,align="left",fill=NA))
 
-# plot
+# plot number of burials (7-day mean and sum)
 ggplot(subset(out_bdr_daily_estimates %>% pivot_longer(col=c(new_graves_best_ipol,rollmeanweek,rollsumweek)),grepl("roll",name)),
-       aes(x=date,y=value)) + facet_wrap(~name,scales="free") + geom_line() + theme_bw() + standard_theme + geom_point(size=0.2) +
-  scale_x_date(date_breaks="4 weeks",expand=expansion(0.0)) # 
+  aes(x=date,y=value)) + facet_wrap(~name,scales="free") + geom_line() + theme_bw() + standard_theme + geom_point(size=0.2) +
+  scale_x_date(date_breaks="4 weeks",expand=expansion(0.0))
 
 # compare to reported deaths
 weekly_deaths_reported=data.frame(subset(covid_somal,name %in% "death")[,c("date","value")],datasource="reported") %>% 
   mutate(datasource=as.character(datasource)) %>% rename(value_report_daily=value) %>%
   mutate(rollmeanweek=roll_mean(value_report_daily,7,align="center",fill=NA),rollsumweek=roll_sum(value_report_daily,7,fill=NA,align="right"))
 # plot together
-df_satell_report=bind_rows(weekly_deaths_reported,
-  data.frame(out_bdr_daily_estimates[,c("date","new_graves_best_ipol","rollmeanweek","rollsumweek")],datasource="satellite") ) %>% 
-  pivot_longer(cols=!c(date,datasource)) %>% filter(!is.na(value)) %>% mutate(type=ifelse(!grepl("sum|mean",name),"daily",name))
-# plot
-ggplot(df_satell_report,aes(x=date,y=value,group=datasource,color=datasource)) + geom_line() + # geom_point(aes(shape=datasource),size=0.9) +
- facet_grid(~type,scales = "free") + theme_bw() + standard_theme + theme(axis.text.x=element_text(size=7)) +
- scale_x_date(date_breaks="2 weeks") + ggtitle(expression("new burials vs reported deaths"))
+ggplot(bind_rows(weekly_deaths_reported,data.frame(out_bdr_daily_estimates[,c("date","daily_baseline_subtr","rollmeanweek","rollsumweek")],datasource="satellite") ) %>% 
+         pivot_longer(cols=!c(date,datasource)) %>% filter(!is.na(value)) %>% mutate(type=ifelse(!grepl("sum|mean",name),"daily",name)),
+       aes(x=date,y=value,group=datasource,color=datasource)) + geom_line() + # geom_point(aes(shape=datasource),size=0.9) +
+ facet_wrap(~type,scales="free",nrow=3) + theme_bw() + standard_theme + theme(axis.text.x=element_text(size=7)) +
+ scale_x_date(date_breaks="2 weeks",expand=expansion(0.01,0)) + scale_y_continuous(expand=expansion(0.03,0)) + 
+ ggtitle(expression("new burials vs reported deaths"))
 # SAVE
 # ggsave("simul_output/somalia_output/satellite_burials_reported_deaths.png",units="cm",height=15,width=25)
 
@@ -100,43 +100,48 @@ OxCGRT_somalia[,"OxCGRT_scaled"]=1-(OxCGRT_somalia$StringencyIndex)/100 # timesp
 # truncate until a given timepoint
 OxCGRT_input = OxCGRT_somalia  # subset(OxCGRT_somalia,date < "2020-08-22")
 
-# var names
-sir_varnames=c("S","E","I_R","I_D","R","D","newinfvar")
 # somalia population
 somal_popul_tot=sum(N_tot); mogadishu_popul=2.2e6
 # transmission parameters
 # d_e (pre-infectious days) | d_p (presympt inf.) | d_c (Duration of symptomatic infectiousness in days) | d_death (timescale of deaths)
-d_e=mean(rgamma(1e4,shape=4,scale=4/4)); d_c=mean(rgamma(n=1e4,shape=4,scale=3.5/4)) # d_p=mean(rgamma(1e4,shape=4,scale=1.5/4)); 
-d_death=21; # sigma=1/d_e; gamma=1/d_c
+d_e=4; d_c=5; d_death=22.5 # mean(rgamma(n=1e4,shape=4,scale=3.5/4)) # d_p=mean(rgamma(1e4,shape=4,scale=1.5/4)); 
+# sigma=1/d_e; gamma=1/d_c
 # TRANSMISSION parameter (same as susceptibility) (without popul normalisation, done in the fcn)
 beta_val=0.5; R0=beta_val/(1/d_c)
 # IFR
-cntr_ex="Somalia"; pop_struct=popF[popF$name %in% cntr_ex,"2020"] + popM[popM$name %in% cntr_ex,"2020"]
-var_categ_list=list(name_vars=c("t", "S", "E","I_R","I_D","R","D","newinfvar","beta"),
-    sel_vars=c("t","S","I_R","R","D","new_infections","new_deaths","symptom_cases"), # "I_D",
-    case_vars=c("S","I_R","R","symptom_cases","new_infections"),cumul_var=c("S","R","D"), 
-    delta_var=c("new_infections","new_deaths"))
+cntr_ex="Somalia"; 
+# clinical fraction
+clinical_fraction=fun_lin_approx_agedep_par(agegroups=data.frame(N_tot),min_val=0.4-0.35,max_val=0.4+0.35,rep_min=5,rep_max=3)
+# variables
+# var names
+sir_varnames=c("S","E","I_C","I_CR","I_CD","I_S","R","D","cumul_sympt_inf","cumul_asympt_inf")
+var_categ_list=list(name_vars=sir_varnames,
+                    sel_vars=c("t","S","I_CR","I_CD","I_S","R","D","new_sympt_infections","new_asympt_infections","new_deaths"),
+                    case_vars=c("S","I_C","I_CR","I_CD","I_S","R","new_sympt_infections","new_asympt_infections"),cumul_var=c("S","R","D"),
+                    delta_var=c("new_sympt_infections","new_asympt_infections","new_deaths"))
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### single simulation ---------------------------------------------
 # timecourse for one param set (R0=beta/(1/d_c)=beta*d_c)
 singlesimul <- fcn_somal_sir_singlesimul(sir_varnames,var_categ_list,timesteps=seq(0,nrow(OxCGRT_input),by=0.25),
-                    day0=as.Date("2019-11-15"), num_params=c("beta"=0.33,"gamma"=1/d_c,"sigma"=1/d_e,"d_death"=1/d_death,"IFR"=1/100),
-                    clin_fract=clinical_fraction,seed_size_val=5,seeding_duration=60,OxCGRT_input,compliance=0.1,
-                    mogadishu_popul*N_tot/sum(N_tot),xlimvals=c(1,350),plot_flag="plot"); singlesimul[[2]]
+    num_params=c("beta"=0.5,"d_e"=4,"d_c"=d_c,"d_death"=d_death,"IFR"=2/100,"sympt_share"=sum(clinical_fraction*N_tot/sum(N_tot)),
+    "asympt_infness"=0.5,"sever_inf"=0,"seed_size_val"=2,"seeding_duration"=60,"compliance"=0.4,"popul_tot"=mogadishu_popul,"k_fast"=1),
+    day0=as.Date("2019-11-30"),OxCGRT_input,fcn_flag="proc")
+# PLOT
+fcn_plot_singlesim_separ_vars(singlesimul,OxCGRT_input,popultot=mogadishu_popul)
 # SAVE
 # filetag_tcourse=paste0(c(paste0(names(num_params)[c(1,4)],"_",round(num_params,3)[c(1,4)]*c(1,1e2)),"compliance",compliance_val,"day",introd_date),collapse="_")
 # ggsave(paste0("simul_output/somalia_output/SIR_timecourse_",filetag,".png"),width=25,height=20,units="cm")
 ####
 # attack rate, cumul death rate: 
 # fcn_attack_death_rate(singlesimul[[1]],plot_flag="calc",y_breaks_lims=NA)
-fcn_attack_death_rate(singlesimul[[1]],plot_flag="plot",y_breaks_lims=list(round(10^((-8:8)/4),2),c(0.1,50)))
+fcn_attack_death_rate(singlesimul,plot_flag="plot",y_breaks_lims=list(round(10^((-8:8)/4),2),c(0.1,50)))
 # R0/HIT
-fcn_calc_R0(beta=0.33,ddeath=1/d_death,drecov=1/d_c,IFR=0.05)
+# fcn_calc_R0(beta=0.33,ddeath=1/d_death,drecov=1/d_c,IFR=0.05)
 
 # compare to data (simulation scaled)
-fcn_plot_singlesim_data_rmse_deaths(singlesimul[[1]],out_bdr_daily_estimates,baselineburialrate=baseline_daily_burials,
-                                    death_rate_percap=0.2,n_per_persday=1e4,popul=mogadishu_popul,"plot")
+fcn_plot_singlesim_data_error_deaths(singlesimul,out_bdr_daily_estimates,baselineburialrate=baseline_daily_burials,
+                                    death_rate_percap=0.4,n_per_persday=1e4,popul=mogadishu_popul,"plot")
 # PEAK cases and deaths
 fcn_plot_peakdates(singlesimul,datelims=c("2019-12-01","2020-08-01"))
 # ggsave(paste0("simul_output/somalia_output/peak_cases_deaths",filetag,".png"),width=25,height=15,units="cm")
@@ -271,7 +276,8 @@ ggplot(df_plot,aes(x=value,y=best_fit,group=CDR)) + geom_line() + geom_point(aes
 ggsave(paste0("simul_output/somalia_output/bestfits/",errtypeval,"/profile_likelihood_CDR.png"),width=32,height=26,units="cm")
 }
 
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### optimisation --------------
 # ODE in fcns file
 

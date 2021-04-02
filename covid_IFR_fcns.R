@@ -14,8 +14,8 @@ ifr_all_age_groups=rbind(ifr_all_age_groups,ifr_all_age_groups[rep(nrow(ifr_all_
 if (any(ifr_all_age_groups>1)) {ifr_all_age_groups=ifr_all_age_groups/1e2}
 # calculate expected fatality for subsah african cntrs
 subsah_afr_cntrs_iso3=c("AGO","BDI","BEN","BFA","BWA","CAF","CIV","CMR","COD","COG","COM","DJI","ERI","ETH","GAB","GHA","GIN",
-                        "GMB","GNB","GNQ","KEN","LBR","LSO","MDG","MLI","MOZ","MRT","MWI","NAM","NER","NGA","RWA","SDN","SEN","SLE","SOM","SSD",
-                        "STP","SWZ","TCD","TGO","TZA","UGA","ZAF","ZMB","ZWE") # "SYC","MUS"
+            "GMB","GNB","GNQ","KEN","LBR","LSO","MDG","MLI","MOZ","MRT","MWI","NAM","NER","NGA","RWA","SDN","SEN","SLE","SOM","SSD",
+            "STP","SWZ","TCD","TGO","TZA","UGA","ZAF","ZMB","ZWE") # "SYC","MUS"
 subsah_afr_cntrs_name=countrycode(subsah_afr_cntrs_iso3,origin='iso3c',destination='un.name.en')
 subsah_afr_cntrs_iso3n=countrycode(subsah_afr_cntrs_iso3,origin='iso3c',destination='iso3n')
 # load data from ourworldindata
@@ -37,7 +37,7 @@ agestruct_subsah_afr_cntrs=data.frame(sapply(subsah_afr_cntrs_iso3n, function(x)
 colnames(agestruct_subsah_afr_cntrs)=subsah_afr_cntrs_name; rownames(agestruct_subsah_afr_cntrs)=unique(popF$age)
 # total expected deaths for 100% prevalence = IFR_by_agegroup*popul_by_agegroup
 subsah_afr_cntrs_total_exp_death=data.frame(country=subsah_afr_cntrs_name,t(sapply(1:ncol(agestruct_subsah_afr_cntrs),
-                                                                                   function(x) {round(sapply(1:3, function(n){1e3*ifr_all_age_groups[,n]%*%agestruct_subsah_afr_cntrs[,x]}))})))
+        function(x) {round(sapply(1:3, function(n){1e3*ifr_all_age_groups[,n]%*%agestruct_subsah_afr_cntrs[,x]}))})))
 colnames(subsah_afr_cntrs_total_exp_death)[2:ncol(subsah_afr_cntrs_total_exp_death)]=colnames(ifr_all_age_groups)
 # IFR for a given country
 # cntr_ex="Somalia"; pop_struct=popF[popF$name %in% cntr_ex,"2020"] + popM[popM$name %in% cntr_ex,"2020"]
@@ -46,9 +46,8 @@ colnames(subsah_afr_cntrs_total_exp_death)[2:ncol(subsah_afr_cntrs_total_exp_dea
 ### transm parameters age dependence -------------------
 age_groups <- data.frame(age_group=c(1:16), age_low=c(seq(0,75,5) ), age_high=c(seq(4,74,5),100))
 # population data from wpp2019
-# countryval="Sudan"; N_tot=fun_cntr_agestr(countryval,i_year="2020",age_groups) # uniform: N_tot=rep(1e6,n_age)
 min_val_susc=1e-2; maxval_susc=0.15; midpoint_susc=(min_val_susc+maxval_susc)/2; delta_susc=maxval_susc-midpoint_susc
-midpoint_clinfract=0.4; delta_clinfr=0.35; rep_min_susc=3; rep_max_susc=5; rep_min_clinfr=5; rep_max_clinfr=3; 
+midpoint_clinfract=0.4; delta_clinfr=0.35; rep_min_susc=3; rep_max_susc=5; rep_min_clinfr=5; rep_max_clinfr=3
 depval=1
 u_val=fun_lin_approx_agedep_par(min_val=midpoint_susc-depval*delta_susc,max_val=midpoint_susc+depval*delta_susc,
                                 rep_min_susc,rep_max_susc)

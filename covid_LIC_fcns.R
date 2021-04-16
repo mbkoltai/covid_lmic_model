@@ -669,9 +669,9 @@ data.frame(agegroup=popF[popF$name %in% cntrval,"age"],
 fcn_merge_ifr_above_age <- function(age_ifr_data,cutoff_age){
   age_ifr_data %>% mutate(agegroup=ifelse(agegroup_min<cutoff_age,as.character(agegroup),paste0(cutoff_age,"+"))) %>% 
     group_by(agegroup) %>% 
-    summarise(mean=sum(mean*agegroupsize/sum(agegroupsize)),agegroup=unique(agegroup)[1],
-          agegroup_mean=sum(agegroup_mean*agegroupsize/sum(agegroupsize)),agegroupsize=sum(agegroupsize)) %>% arrange(agegroup_mean)
-}
+    summarise(ifr_mean=sum(mean*agegroupsize/sum(agegroupsize)),agegroup=unique(agegroup)[1],
+          agegroup_mean=sum(agegroup_mean*agegroupsize/sum(agegroupsize)),agegroupsize=sum(agegroupsize)) %>%
+    mutate(n=sum(agegroupsize),agegroup_perc=agegroupsize/n) %>% select(!n) %>% arrange(agegroup_mean) }
 
 ### get_OxCGRT -----------------------------
 

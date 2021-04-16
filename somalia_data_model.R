@@ -104,31 +104,32 @@ params$pop[[1]]$dist_seed_ages=cm_age_coefficients(20,60,5*(0:length(params$pop[
 ### incident deaths -------
 ### set up age structure + IFR
 somalia_agegroups_IFR=fcn_merge_ifr_above_age(left_join(fcn_load_age_str("Somalia",90),fcn_load_ifr("data/IFR_by_age_imperial.csv"),
-                                                        by=c("agegroup","agegroup_min")),75)
+                                              by=c("agegroup","agegroup_min")),75); somalia_agegroups_IFR$ifr_mean[1]=3e-6
+
 ### add death process to model ------
-params$processes <- list(cm_multinom_process("Ip",outcomes=data.table(death=somalia_agegroups_IFR$mean), 
+params$processes <- list(cm_multinom_process("Ip",outcomes=data.table(death=somalia_agegroups_IFR$ifr_mean), 
                                              delays=data.table(death=ponset2death), report="o"))
 # RUN SIMUL
 delta_clinfr=0.3
-params$pop[[1]]$y=fun_lin_approx_agedep_par(agegroups=somalia_agegroups_IFR,min_val=0.35-delta_clinfr,
-                                            max_val=0.35+delta_clinfr,rep_min=3,rep_max=5)
-target_R0=2.4; scale_r0=target_R0/cm_calc_R0(params,1)
+params$pop[[1]]$y=fun_lin_approx_agedep_par(agegroups=somalia_agegroups_IFR,min_val=0.1,max_val=0.75,rep_min=3,rep_max=5)
+target_R0=1.8; scale_r0=target_R0/cm_calc_R0(params,1)
 # change susceptibility to get R0
 params$pop[[1]]$u=params$pop[[1]]$u*(target_R0/cm_calc_R0(params,1))
 # set population to Somalia --> Mogadishu
 N_tot=fun_cntr_agestr(countryval,i_year="2020",age_groups=data.frame(age_group=c(1:16),age_low=c(seq(0,75,5)),age_high=c(seq(4,74,5),100)))
 params$pop[[1]]$size=N_tot*mogadishu_popul/sum(N_tot)
 # NPIs
+# first="2020-03-19","2020-05-28"
 NPI_phases=list(first=c("2020-03-19","2020-05-28"),second=c("2020-05-29","2020-06-30"),third=c("2020-07-01","2020-09-24"))
-NPIvals=sapply(NPI_phases,function(x) mean(OxCGRT_input$OxCGRT_scaled[OxCGRT_input$date>as.Date(x)[1] & OxCGRT_input$date<as.Date(x)[2]]))
-for (k in 1:length(NPIvals)) {
-  # setup for version 1
-  if (cm_version==1) {if (k==1) {iv = cm_iv_build(params)} # this sets up a data structure for doing interventions
-    cm_iv_contact(iv, NPI_phases[[k]][1], NPI_phases[[k]][2], as.numeric(rep(NPIvals[k],4))) 
+NPIvals=sapply(NPI_phases,function(x) mean(OxCGRT_input$OxCGRT_scaled[OxCGRT_input$date>as.Date(x)[1]&OxCGRT_input$date<as.Date(x)[2]]))
+k_compl=0.1
+for (k in 1:length(NPIvals)) { # setup for version 1
+  if (cm_version==1) {if (k==1) {params$pop[[1]]$schedule=NULL; iv=cm_iv_build(params)} # sets up data structure for interventions
+    cm_iv_contact(iv, NPI_phases[[k]][1], NPI_phases[[k]][2], 1-(1-as.numeric(rep(NPIvals[k],4)))*k_compl) 
     if (k==length(NPIvals)) {params=cm_iv_apply(params,iv)} } else { # sets the "schedule" parameter to follow interventions in iv
-  # setup for version 2
-params$schedule[[k]]=list(parameter="contact",pops=numeric(),mode="multiply",values=list(rep(NPIvals[k],4),rep(1,4)),times=NPI_phases[[k]])}
-  }
+  # version 2
+  params$schedule[[k]]=list(parameter="contact",pops=numeric(),mode="multiply",
+                          values=list(rep(NPIvals[k],4),rep(1,4)),times=NPI_phases[[k]])} }
 ### ### ### ### ### ### ### ### ### ###
 # RUN SIMULATION
 ptm<-proc.time(); run=cm_simulate(params,1); proc.time()-ptm 
@@ -143,39 +144,37 @@ npi_df=data.frame(on_off=c("on","off"),NPI_phases) %>% pivot_longer(!on_off) %>%
 seeding_df=data.frame(seed_date=unique(covidm_simul$date)[unique(params$pop[[1]]$seed_times)]) %>% summarise(min=min(seed_date),max=max(seed_date))
 ggplot(subset(covidm_simul,!dynam_type %in% "preval")) + geom_area(aes(x=date,y=value,fill=compartment),color="black",size=0.3) +
   facet_wrap(dynam_type~compartm_type,scales="free") + theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5)) +
-  scale_x_date(limits=as.Date(c("2019-11-30","2020-06-15")),date_breaks="2 weeks",expand=expansion(0,0)) + ylab("number") + 
-  scale_y_continuous(expand=expansion(0.01,0)) + geom_vline(data=npi_df,aes(xintercept=date),color="black",linetype="dashed") + # 
+  scale_x_date(limits=as.Date(c("2019-11-30","2020-08-15")),date_breaks="2 weeks",expand=expansion(0,0)) + ylab("number") + 
+  scale_y_continuous(expand=expansion(0.01,0)) + geom_vline(data=npi_df,aes(xintercept=date,color=name),size=1.1) + # linetype="dashed"
   geom_rect(data=seeding_df,aes(xmin=min,xmax=max,ymin=0,ymax=Inf),fill="pink",color=NA,alpha=0.4)
 # SAVE
-ggsave(paste0("simul_output/somalia_output/covidm",cm_version,"_output.png"),width=30,height=20,units="cm")
+# ggsave(paste0("simul_output/somalia_output/covidm",cm_version,"_output.png"),width=30,height=20,units="cm")
 
 # PLOT incident deaths with data
 # out_bdr_daily_estimates %>% select(date,new_graves_best_ipol,daily_baseline_subtr,rollmeanweek)
-fitting_date_window=as.Date(c("2019-12-01","2020-08-20"))
+fitting_date_window=as.Date(c("2019-01-15","2020-08-01"))
 fcn_covidm_singlesim_error(covidm_simul,out_bdr_daily_estimates,fitting_date_window)
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### MCMC --------------
 # define fitting parameters
-somalia_agegroups_IFR$mean[1]=3e-6 # IFR_by_age=somalia_agegroups_IFR$mean
 # linear regression of ifr so we can generate new vals
-linregr=lm(ifr~age,data=somalia_agegroups_IFR[,c("agegroup_mean","mean")] %>% mutate(mean=log(mean)) %>% 
-             rename(age=agegroup_mean,ifr=mean))
-# ggplot(somalia_agegroups_IFR %>% mutate(pred_ifr=exp(-11.5+0.105*c(2.5+(0:14)*5,80.255))) %>% pivot_longer(!c(agegroup,agegroup_mean)),
-#   aes(x=agegroup_mean,y=value*1e2,group=name,color=name)) + geom_line() + geom_point() + theme_bw() + standard_theme + # exp(linregr$fitted.values)
-#   scale_x_continuous(breaks=2.5+(0:16)*5) + scale_y_log10()
+somalia_agegroups_IFR = somalia_agegroups_IFR %>% mutate(log_ifr=log(ifr_mean),logit_ifr=log(ifr_mean/(1-ifr_mean)))
+# ggplot(somalia_agegroups_IFR,aes(x=agegroup_mean)) + geom_line(aes(y=log_ifr)) + geom_point(aes(y=log_ifr)) + 
+#   geom_line(aes(y=logit_ifr),color="red") + geom_point(aes(y=logit_ifr),color="red")+ scale_x_continuous(breaks=2.5+(0:16)*5)
+linregr=lm(logit_ifr~agegroup_mean,data=somalia_agegroups_IFR %>% select(agegroup_mean,logit_ifr) )
+ggplot(somalia_agegroups_IFR %>% mutate(pred_ifr=
+  inv.logit(linregr$coefficients["(Intercept)"] + linregr$coefficients["agegroup_mean"]*somalia_agegroups_IFR$agegroup_mean),
+  shifted_ifr=inv.logit(-8 + linregr$coefficients["agegroup_mean"]*somalia_agegroups_IFR$agegroup_mean)) %>%
+  select(agegroup_mean,ifr_mean,pred_ifr,shifted_ifr) %>% pivot_longer(!c(agegroup_mean)),aes(x=agegroup_mean,y=value*1e2,group=name,color=name)) +
+  geom_line() + geom_point() + theme_bw() + standard_theme + scale_x_continuous(breaks=2.5+(0:16)*5) + scale_y_log10()
 # predicted IFR: exp(-10.8 + 0.1*c(2.5+(0:14)*5,80.255))
 # clinical fraction
-d_clinfr=0.3; params$pop[[1]]$y=fun_lin_approx_agedep_par(somalia_agegroups_IFR,min_val=0.35-d_clinfr,max_val=0.35+d_clinfr,rep_min=3,rep_max=5)
-plot(somalia_agegroups_IFR$agegroup_mean,params$pop[[1]]$y,type = "b")
+# d_clinfr=0.3; params$pop[[1]]$y=fun_lin_approx_agedep_par(somalia_agegroups_IFR,min_val=0.35-d_clinfr,max_val=0.35+d_clinfr,rep_min=3,rep_max=5)
+# plot(somalia_agegroups_IFR$agegroup_mean,params$pop[[1]]$y,type = "b")
 # compliance with NPIs
 ### ### ### ### ### ### ### ###
 # define parameters func, which interprets a proposal for the posterior distribution as a parameter set usable by the underlying model.
-# pf = function(parameters, x){
-#   x = as.list(x); n_groups = length(parameters$pop[[1]]$size);
-#   parameters$pop[[1]]$u = rep(x$u, n_groups); 
-#   parameters$pop[[1]]$seed_times=floor(x$t_intro) + 0:6; # seed for 7 days
-#   return (parameters) }
 fitting_params <- c("R0_target","introd_date","seed_size","ifr_exp_intercept", "compliance")
 pf <- function(parameters, x){ x = as.list(x); n_groups = length(parameters$pop[[1]]$size);
     # R0
@@ -183,18 +182,18 @@ pf <- function(parameters, x){ x = as.list(x); n_groups = length(parameters$pop[
     # seed size and introd date
     parameters$pop[[1]]$seed_times=rep(x$introd_date:139,each=x$seed_size)
   # IFR
-  parameters$processes<-list(cm_multinom_process("Ip",outcomes=data.table(death=exp(x$ifr_exp_intercept+0.1*c(2.5+(0:14)*5,80.255)) ),
+    agegroupmeans=c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,62.5,67.5,72.5,80.255)
+  parameters$processes<-list(cm_multinom_process("Ip",outcomes=data.table(death=inv.logit(x$ifr_exp_intercept+0.1*agegroupmeans)),
                                                  delays=data.table(death=ponset2death),report="o"))
-    # compliance
-    NPIphases=list(first=c("2020-03-19","2020-05-28"),second=c("2020-05-29","2020-06-30"),third=c("2020-07-01","2020-09-24")); 
-    npi_vals=c(0.4233,0.5237,0.7144)
-    for (k in 1:length(npi_vals)) { if (k==1) {iv = cm_iv_build(parameters)}
-      cm_iv_contact(iv, NPIphases[[k]][1], NPIphases[[k]][2], as.numeric(rep(npi_vals[k],4))*x$compliance) 
+  # compliance
+  t_npi=list(c("2020-03-19","2020-05-28"),c("2020-05-29","2020-06-30"),c("2020-07-01","2020-09-24")); npi_vals=c(0.423,0.524,0.714)
+    for (k in 1:length(npi_vals)) { if (k==1) {iv=cm_iv_build(parameters)}
+      cm_iv_contact(iv, t_npi[[k]][1], t_npi[[k]][2], 1 - ( 1-as.numeric(rep(npi_vals[k],4)) )*x$compliance ) 
       if (k==length(npi_vals)) {parameters$pop[[1]]$schedule=NULL; parameters=cm_iv_apply(parameters,iv)} }
     return (parameters) }
 # priors
 # priors = list(u="N 0.1 0.025 T 0 0.2", t_intro="U 0 10")
-priors=list(R0_target="N 3 1 T 1 5", introd_date="N 50 10 T 10 90",seed_size="U 1 5",ifr_exp_intercept="U -12 -8.5",compliance="U 0 1")
+priors=list(R0_target="N 3 1 T 1 5", introd_date="N 50 10 T 10 90",seed_size="U 1 5",ifr_exp_intercept="U -12 -6",compliance="U 0 1")
 # data
 # scaling by CDR
 CDR_vals=c(0.3,0.4,0.5); scale_factor=(mogadishu_popul*CDR_vals[1]/1e4)/baseline_daily_burials
@@ -214,12 +213,12 @@ fit=cm_fit(base_parameters=params, priors = priors, parameters_func = pf, likeli
 # show posteriors
 # cm_plot_posterior(fit); cm_plot_pairwise(fit)
 # histogram of posteriors
-df_posteriors=fit$posterior %>% select(all_of(fitting_params)) %>% mutate(n=1:nrow(fit$posterior),ifr_age_weighted_perc=
-  1e2*sapply(ifr_exp_intercept,function(x) sum(exp(x+0.1*somalia_agegroups_IFR$agegroup_mean)*
-             somalia_agegroups_IFR$agegroupsize/sum(somalia_agegroups_IFR$agegroupsize)) ) ) %>% pivot_longer(!n)
+df_posteriors=fit$posterior %>% select(all_of(fitting_params)) %>% mutate(ifr_age_weighted_perc=1e2*sapply(ifr_exp_intercept,
+  function(x) sum(exp(x+0.1*somalia_agegroups_IFR$agegroup_mean)*somalia_agegroups_IFR$agegroup_perc) ) )
 # plot distribs
-ggplot(subset(df_posteriors, !name %in% "ifr_exp_intercept")) + geom_histogram(aes(x=value,fill=name),bins=20,color="black",size=0.2) + 
-  facet_wrap(~name,scales = "free") + theme_bw() + standard_theme
+ggplot(subset(df_posteriors %>% mutate(n=1:nrow(fit$posterior)) %>% pivot_longer(!n), !name %in% "ifr_exp_intercept")) + 
+  geom_histogram(aes(x=value,fill=name),bins=50,color="black",size=0.2) + facet_wrap(~name,scales="free") + 
+  theme_bw() + standard_theme
 
 # use posterior to generate sample dynamics from the model
 dyn = cm_sample_fit(fit, 25)

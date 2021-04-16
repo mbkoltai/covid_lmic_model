@@ -7,6 +7,29 @@ fun_seir_agestr_varnames=function(varname_list,n_age){
   array( sapply(1:n_age, function(x_age) {sapply(varname_list, function(x) {paste0(x,'_',x_age)}) } ) )
 }
 
+### function to have COVIDM incidence outputs
+cm_multinom_process <- function(
+  src, outcomes, delays,
+  report = ""
+) {
+  if ("null" %in% names(outcomes)) {
+    if (length(report) != length(outcomes)) report <- rep(report, length(outcomes))
+    report[which(names(outcomes)=="null")] <- ""
+    if (!("null" %in% names(delays))) {
+      delays$null <- c(1, rep(0, length(delays[[1]])-1))
+    }
+  } else if (!all(rowSums(outcomes)==1)) {
+    report <- c(rep(report, length(outcomes)), "")
+    outcomes$null <- 1-rowSums(outcomes)
+    delays$null <- c(1, rep(0, length(delays[[1]])-1))
+  }
+  nrow <- length(outcomes)
+  list(
+    source = src, type="multinomial", names=names(outcomes), report = report,
+    prob = t(as.matrix(outcomes)), delays = t(as.matrix(delays))
+  )
+}
+
 ### generate kinetic matrix ----------------------------------------------------------
 fun_seir_agestr_kinmatr=function(infect_vartype,vartype_list,n_age,infect_first_ord_pars,y_val){
   dim_sys=n_age*length(vartype_list); K_m=matrix(0,dim_sys,dim_sys)
@@ -26,25 +49,46 @@ for (i_age in 1:n_age){
 }
 
 ### create df with cumul rates
-fcn_covidm_df <- function(lmic_simul,sel_vars,params){   # c("S","E","Ip","Is","R")
-agegr_pop=lmic_simul[lmic_simul$t==0 & lmic_simul$compartment %in% sel_vars] %>% group_by(population,group) %>% 
-  summarise(pop=sum(value)); agegr_pop <- agegr_pop %>% mutate(pop_perc=pop/sum(pop))
-colnames(lmic_simul)[colnames(lmic_simul) %in% "value"]="number"
-lmic_simul=left_join(lmic_simul,agegr_pop,by=c("group","population")); 
-lmic_simul[,"percent_agegr_popul"]=round(lmic_simul$number/lmic_simul$pop,4)
-# fraction of the compartment at each timepoint
-lmic_simul=lmic_simul %>% group_by(t,compartment,population) %>% mutate(percent_cases_at_t=number/sum(number))
-# cumulative symptomatic attack rate. distribution of E between Is and Ia set by age-dependent parameter 
-age_sympt_fract=data.frame(group=unique(lmic_simul$group),sympt_fract=params$pop[[1]]$y)
-lmic_simul_cumulcases=lmic_simul[lmic_simul$compartment %in% "R",]
-lmic_simul_cumulcases=left_join(lmic_simul_cumulcases,age_sympt_fract,by="group")
-for (k in c("number","percent_agegr_popul","percent_cases_at_t")) {
-  lmic_simul_cumulcases[,k]=lmic_simul_cumulcases[,k]*lmic_simul_cumulcases[,"sympt_fract"]}
-lmic_simul_cumulcases$compartment="cumul_sympt_cases"
-if (!any(grepl("cumul",colnames(lmic_simul)))) {
-  lmic_simul=rbind(lmic_simul,lmic_simul_cumulcases[,!colnames(lmic_simul_cumulcases) %in% "sympt_fract"]) }
-lmic_simul <- lmic_simul %>% pivot_longer(cols=c(number,percent_agegr_popul,percent_cases_at_t),names_to="variable")
-lmic_simul
+fcn_covidm_df <- function(lmic_simul,sel_vars,pars){   # c("S","E","Ip","Is","R")
+  agegr_pop=lmic_simul[lmic_simul$t==0 & lmic_simul$compartment %in% sel_vars] %>% group_by(population,group) %>% summarise(pop=sum(value))
+    agegr_pop <- agegr_pop %>% mutate(pop_perc=pop/sum(pop)); colnames(lmic_simul)[colnames(lmic_simul) %in% "value"]="number"
+    lmic_simul=left_join(lmic_simul,agegr_pop,by=c("group","population")); 
+    lmic_simul[,"percent_agegr_popul"]=round(lmic_simul$number/lmic_simul$pop,4)
+    # fraction of the compartment at each timepoint
+    lmic_simul=lmic_simul %>% group_by(t,compartment,population) %>% mutate(percent_cases_at_t=number/sum(number))
+    # cumulative symptomatic attack rate. distribution of E between Is and Ia set by age-dependent parameter 
+    age_sympt_fract=data.frame(group=unique(lmic_simul$group),sympt_fract=pars$pop[[1]]$y)
+    lmic_simul_cumulcases=lmic_simul[lmic_simul$compartment %in% "R",]
+    lmic_simul_cumulcases=left_join(lmic_simul_cumulcases,age_sympt_fract,by="group")
+    for (k in c("number","percent_agegr_popul","percent_cases_at_t")) {
+      lmic_simul_cumulcases[,k]=lmic_simul_cumulcases[,k]*lmic_simul_cumulcases[,"sympt_fract"]}
+    lmic_simul_cumulcases$compartment="cumul_sympt_cases"
+    if (!any(grepl("cumul",colnames(lmic_simul)))) {
+      lmic_simul=rbind(lmic_simul,lmic_simul_cumulcases[,!colnames(lmic_simul_cumulcases) %in% "sympt_fract"]) }
+    lmic_simul <- lmic_simul %>% pivot_longer(cols=c(number,percent_agegr_popul,percent_cases_at_t),names_to="variable")
+    subset(lmic_simul,compartment %in% c(sel_vars,"cumul_sympt_cases"))
+}
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+### function to process covidm simul output -----------------
+fcn_covidm_process_output <- function(run_dynamics,filter_vars,compartm_types_val,dynamics_type_val,populval,modelparams){
+df_sim=subset(run_dynamics,!compartment %in% filter_vars)%>% select(!run) %>% group_by(t,compartment) %>% summarise(value=sum(value))
+bind_rows(df_sim, subset(df_sim,compartment %in% "death_o") %>% 
+        group_by(compartment) %>% mutate(value=cumsum(value),compartment="D") ) %>% mutate(value_perc_pop=value/populval,
+        compartm_type=sapply(compartment,function(k) names(compartm_types_val)[sapply(compartm_types_val,function(x) sum(x %in% k))==1]),
+        dynam_type=sapply(compartment,function(k) names(dynamics_type_val)[sapply(dynamics_type_val,function(x) sum(x %in% k))==1]) ) %>%
+  mutate(date=seq(as.Date(modelparams$date0),as.Date(modelparams$time1),1)[t+1]) %>%  ungroup()
+}
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+### plot single simul and calc error -----------------
+fcn_covidm_singlesim_error <- function(covidmsimul,df_data,fitting_dates){
+  df_data_simul_deaths=left_join(subset(covidmsimul %>% rename(simul=value),compartment %in% "death_o")%>% select(date,simul),
+        df_data %>% select(date,daily_baseline_subtr) %>% rename(data=daily_baseline_subtr)) %>% pivot_longer(!date)
+abs_err=subset(df_data_simul_deaths, date >= fitting_dates[1] & date <= fitting_dates[2]) %>% group_by(date) %>%
+  summarise(data=value[name=="data"],diff=value[name=="data"]-value[name=="simul"],sumval=sum(value),mae=abs(diff))
+ggplot(df_data_simul_deaths,aes(x=date)) + geom_line(aes(y=value,group=name,color=name)) + theme_bw() + standard_theme + 
+  ggtitle(paste0("MAE=",round(mean(abs_err$mae),2))) + scale_x_date(limits = fitting_dates)
 }
 
 ### generate matrices to scale force of infection terms ---------
@@ -135,7 +179,9 @@ getClinicalFraction <- function(age_groups){
 ### age structure of a country --------------------
 fun_cntr_agestr=function(i_cntr,i_year,age_groups){
   if (!any((.packages()) %in% "wpp2019")) {library(wpp2019)}; if (!exists("popF")) {data("pop")}
-cntr_agestr=data.frame(agegroups=popF[popF$name %in% i_cntr,"age"],values=popF[popF$name %in% i_cntr,i_year] +
+  if (!any(colnames(popF) %in% i_year)) {i_year=colnames(popF)[ncol(popF)]; message("age groups from year ",i_year)}
+  
+  cntr_agestr=data.frame(agegroups=popF[popF$name %in% i_cntr,"age"],values=popF[popF$name %in% i_cntr,i_year] +
                                         popM[popM$name %in% i_cntr,i_year])
 agegr_truthvals=sapply(strsplit(as.character(cntr_agestr$agegroups),"-"),"[[",1) %in% age_groups$age_low
 N_tot=cntr_agestr$values[agegr_truthvals]
@@ -504,68 +550,150 @@ R0_scan
 }
 
 ### ODE fcns for somalia model
+# simple_sir_somalia_interpol <- function(t,x,parms) {
+#   S<-x[1]; E<-x[2]; I_C<-x[3]; I_CR<-x[4]; I_CD=x[5]; R=x[6]; D=x[7]
+#   with(as.list(c(x,parms)), {
+#     beta_variable=beta_eff*input_npi(t); force_inf=beta_variable*(I_C + I_CR + sever_inf*I_CD)
+#     force_inf=beta_variable*(I_C + I_CR + sever_inf*I_CD)
+#     dS = -S*force_inf; dE = S*force_inf - d_e*E + input_seeding(t)*inv_timestep
+#     dI_C=d_e*E - k_fast*I_C; dI_CR=(1-IFR_estim)*k_fast*I_C - d_cr*I_CR; dI_CD=IFR_estim*k_fast*I_C - d_cd*I_CD
+#     dR=d_cr*I_CR; dD=d_cd*I_CD; cumulinf=d_e*E  # infect who'll recover or die
+#     return(list(c(dS,dE,dI_C,dI_CR,dI_CD,dR,dD,cumulinf)))
+#   }) }
+#
+#
+# simple_sir_somalia_interpol <- function(t,x,parms) {
+#   S<-x[1]; E<-x[2]; I_C<-x[3]; I_CR<-x[4]; I_CD=x[5]; I_S=x[6]; R=x[7]; D=x[8]
+#   with(as.list(c(x,parms)), {
+#     beta_variable=beta_eff*input_npi(t); force_inf=beta_variable*(I_C + I_CR + sever_inf*I_CD + f_asympt*I_S); d_s=d_cr
+#     dS = -S*force_inf; dE = S*force_inf - d_e*E + input_seeding(t)*inv_timestep
+#     dI_C=symptshare*d_e*E - k_fast*I_C
+#     dI_CR=(1-IFR_estim)*k_fast*I_C - d_cr*I_CR
+#     dI_CD=IFR_estim*k_fast*I_C - d_cd*I_CD
+#     dI_S=(1-symptshare)*d_e*E - d_s*I_S
+#     dR=d_cr*I_CR + d_s*I_S; dD=d_cd*I_CD; cumul_sympt_inf=symptshare*d_e*E; cumul_asympt_inf=(1-symptshare)*d_e*E  
+#     return(list(c(dS,dE,dI_C,dI_CR,dI_CD,dI_S,dR,dD,cumul_sympt_inf,cumul_asympt_inf)))
+#   }) }
+
+# ODE fcn 
 simple_sir_somalia_interpol <- function(t,x,parms) {
-  S<-x[1]; E<-x[2]; I_C<-x[3]; I_CR<-x[4]; I_CD=x[5]; R=x[6]; D=x[7]
+  S<-x[1]; E<-x[2]; I_P<-x[3]; I_C<-x[4]; I_S=x[5]; R=x[6]
   with(as.list(c(x,parms)), {
-    beta_variable=beta_eff*input_npi(t); force_inf=beta_variable*(I_C + I_CR + sever_inf*I_CD)
-    force_inf=beta_variable*(I_C + I_CR + sever_inf*I_CD)
+    beta_variable=beta_eff*input_npi(t); force_inf=beta_variable*(I_P + I_C + f_asympt*I_S)
     dS = -S*force_inf; dE = S*force_inf - d_e*E + input_seeding(t)*inv_timestep
-    dI_C=d_e*E - k_fast*I_C; dI_CR=(1-IFR_estim)*k_fast*I_C - d_cr*I_CR; dI_CD=IFR_estim*k_fast*I_C - d_cd*I_CD
-    dR=d_cr*I_CR; dD=d_cd*I_CD; cumulinf=d_e*E  # infect who'll recover or die
-    return(list(c(dS,dE,dI_C,dI_CR,dI_CD,dR,dD,cumulinf)))
+    dI_P=symptshare*d_e*E - d_p*I_P; dI_C=d_p*I_P - d_c*I_C
+    dI_S=(1-symptshare)*d_e*E - d_s*I_S
+    dR=d_c*I_C + d_s*I_S
+    cumul_sympt_inf=d_p*I_P; cumul_asympt_inf=(1-symptshare)*d_e*E
+    return(list(c(dS,dE,dI_P,dI_C,dI_S,dR,cumul_sympt_inf,cumul_asympt_inf)))
   }) }
 
-### function to run and plot single simul for somalia SIR model -------------
-fcn_somal_sir_singlesimul <- function(sir_varnames,var_categ_list,timesteps,num_params,day0,NPI_input,fcn_flag){
+### function to run and plot single simul for somalia SIR model -----------------------------
+fcn_somal_sir_singlesimul <- function(varcateglist,time_steps,num_params,day0,NPI_input,fcn_flag){
   popul_tot=num_params["popul_tot"]; timespan_dates=NPI_input$date
-  initvals_S_I=c(popul_tot,rep(0,length(sir_varnames)-1)); names(initvals_S_I)=c(sir_varnames)
-  day0_num=as.numeric(day0-timespan_dates[1]); suscept_reduct=1-NPI_input$OxCGRT_scaled
-  
-  timesteps<-seq(0,length(NPI_input$OxCGRT_scaled),by=0.25)
-  timevar_signal<-data.frame(t=(1:nrow(NPI_input))-1,npi_index=1-suscept_reduct*NPI_input$NPI_on*num_params["compliance"],seeding=0)
+  initvals_S_I=c(popul_tot,rep(0,length(varcateglist$name_vars)-1)); names(initvals_S_I)=c(varcateglist$name_vars)
+  day0_num=as.numeric(day0-timespan_dates[1]); 
+
+  timesteps<-seq(0,length(NPI_input$OxCGRT_scaled),by=unique(diff(time_steps)))
+  timevar_signal<-data.frame(t=(1:nrow(NPI_input))-1,
+                             npi_index=1-(1-NPI_input$OxCGRT_scaled)*NPI_input$NPI_on*num_params["compliance"],seeding=0)
   timevar_signal$seeding[timevar_signal$t %in% day0_num:(day0_num+num_params["seeding_duration"])]=num_params["seed_size_val"]
   # print(timevar_signal)
 input_npi <- approxfun(timevar_signal[,c("t","npi_index")]); input_seeding<-approxfun(timevar_signal[,c("t","seeding")])
 ### create ODE object
 symptshare=num_params["sympt_share"]
-params=list(beta_eff=num_params['beta']/popul_tot,d_e=1/num_params['d_e'],d_cr=1/num_params['d_c'],d_cd=1/num_params['d_death'],
-            IFR_estim=num_params['IFR'],sever_inf=num_params['sever_inf'],seed_size=num_params["seed_size_val"],
-            symptshare=num_params["sympt_share"],f_asympt=num_params["asympt_infness"],
-            inv_timestep=1/unique(diff(timesteps)),k_fast=num_params["k_fast"])
+params=list(beta_eff=num_params['beta']/popul_tot,d_e=1/num_params['d_e'],d_p=1/num_params['d_p'],d_c=1/num_params['d_c'],
+    d_s=1/num_params['d_s'],IFR_estim=num_params['IFR'],seed_size=num_params["seed_size_val"],
+    symptshare=num_params["sympt_share"],f_asympt=num_params["asympt_infness"],inv_timestep=1/unique(diff(timesteps)))
 # ODE fcn 
-simple_sir_somalia_interpol <- function(t,x,parms) {
-    S<-x[1]; E<-x[2]; I_C<-x[3]; I_CR<-x[4]; I_CD=x[5]; I_S=x[6]; R=x[7]; D=x[8]
-    with(as.list(c(x,parms)), {
-      beta_variable=beta_eff*input_npi(t); force_inf=beta_variable*(I_C + I_CR + sever_inf*I_CD + f_asympt*I_S); d_s=d_cr
-      dS = -S*force_inf; dE = S*force_inf - d_e*E + input_seeding(t)*inv_timestep
-      dI_C=symptshare*d_e*E - k_fast*I_C; dI_CR=(1-IFR_estim)*k_fast*I_C - d_cr*I_CR; dI_CD=IFR_estim*k_fast*I_C - d_cd*I_CD
-      dI_S=(1-symptshare)*d_e*E - d_s*I_S
-      dR=d_cr*I_CR + d_s*I_S; dD=d_cd*I_CD; cumul_sympt_inf=symptshare*d_e*E; cumul_asympt_inf=(1-symptshare)*d_e*E  
-      return(list(c(dS,dE,dI_C,dI_CR,dI_CD,dI_S,dR,dD,cumul_sympt_inf,cumul_asympt_inf)))
-      }) }
+ode_fcn <- function(t,x,parms) {
+  S<-x[1]; E<-x[2]; I_P<-x[3]; I_C<-x[4]; I_S=x[5]; R=x[6]
+  with(as.list(c(x,parms)), {
+    beta_variable=beta_eff*input_npi(t); force_inf=beta_variable*(I_P + I_C + f_asympt*I_S)
+    dS = -S*force_inf; dE = S*force_inf - d_e*E + input_seeding(t)*inv_timestep
+    dI_P=symptshare*d_e*E - d_p*I_P;  dI_C=d_p*I_P - d_c*I_C;  dI_S=(1-symptshare)*d_e*E - d_s*I_S
+    dR=d_c*I_C + d_s*I_S
+    cumul_sympt_inf=d_p*I_P; cumul_asympt_inf=(1-symptshare)*d_e*E; cumul_presympt_inf=symptshare*d_e*E; incid_E=S*force_inf
+    return(list(c(dS,dE,dI_P,dI_C,dI_S,dR,cumul_sympt_inf,cumul_asympt_inf,cumul_presympt_inf,incid_E)))
+  }) }
 # RUN
-  df_ode_solution <- euler(y=initvals_S_I,times=timesteps,func=simple_sir_somalia_interpol,parms=params) %>%
-    as.data.frame() %>% setNames(c("t",var_categ_list$name_vars)) # %>% filter(t %% 1 ==0) 
+  df_ode_solution <- ode(y=initvals_S_I,times=timesteps,func=ode_fcn,parms=params,method="euler") %>% # euler
+    as.data.frame() %>% setNames(c("t",varcateglist$name_vars)) # %>% filter(t %% 1 ==0) 
 # process output
   if (nchar(fcn_flag)>0) {
-    df_ode_solution = df_ode_solution %>% mutate(new_deaths=D-lag(D, default=D[1]),
-      new_sympt_infections=cumul_sympt_inf-lag(cumul_sympt_inf,default=cumul_sympt_inf[1]),
-      new_asympt_infections=cumul_asympt_inf-lag(cumul_asympt_inf,default=cumul_asympt_inf[1]),
-      symptom_cases=I_C+I_CR+I_CD) %>% select(var_categ_list$sel_vars) %>% pivot_longer(cols=!t) %>%
-      mutate(case_death_var=ifelse(name %in% var_categ_list$case_vars,"case","fatal"),
-      cumul_trans_var=ifelse(name %in% var_categ_list$cumul_var,"cumul","transient"),
-      state_delta_var=ifelse(name %in% var_categ_list$delta_var,"delta","state"),
+  df_ode_solution = df_ode_solution %>% 
+    mutate(new_E=incid_E-lag(incid_E,default=incid_E[1]),
+      new_sympt_inf=cumul_sympt_inf-lag(cumul_sympt_inf,default=cumul_sympt_inf[1]),
+      new_presympt_inf=cumul_presympt_inf-lag(cumul_presympt_inf,default=cumul_presympt_inf[1]),
+    new_asympt_inf=cumul_asympt_inf-lag(cumul_asympt_inf,default=cumul_asympt_inf[1]),new_recov=R-lag(R,default=R[1]),
+    new_deaths=symptshare*num_params['IFR']*lag(new_recov,n=num_params["d_death"]/unique(diff(timesteps))),
+    new_deaths_poiss=rpois(n=1:nrow(df_ode_solution),replace_na(new_deaths,0)),
+    D=cumsum(replace_na(new_deaths,0)),R_recov=R-D) %>% select(varcateglist$sel_vars) %>% pivot_longer(cols=!t) %>% 
+    mutate(case_death_var=ifelse(name %in% varcateglist$case_vars,"case","fatal"),
+      cumul_trans_var=ifelse(name %in% varcateglist$cumul_var,"cumul","transient"),
+      state_delta_var=ifelse(name %in% varcateglist$delta_var,"delta","state"),
       date=timespan_dates[t+1],name=factor(name,levels=unique(name)),
-      introd_date=day0,seed_size=num_params["seed_size_val"],IFR_sympt=num_params['IFR'],IFR_all_inf=num_params['IFR']*symptshare,
+      introd_date=day0,seed_size=num_params["seed_size_val"],IFR_sympt=num_params['IFR'], # ,IFR_all_inf=num_params['IFR']*symptshare
       npi_compliance=num_params["compliance"],beta=num_params['beta'],
-      R0=num_params['beta']*(symptshare*((1-num_params['IFR'])*num_params['d_c'] + 
-                    num_params['IFR']*num_params['d_death']*num_params['sever_inf']) + 
-                    (1-symptshare)*num_params["asympt_infness"]*num_params['d_c']),
+      R0=num_params['beta']*(symptshare*(num_params['d_c'] + num_params['d_p']) + 
+                               (1-symptshare)*num_params["asympt_infness"]*num_params['d_s']),
       seeding_duration=num_params["seeding_duration"]) %>% filter(!(is.na(date) | is.na(value)))
     }
 df_ode_solution
 }
 
+### load IFRs from imperial estimates
+fcn_load_ifr <- function(ifr_filepath){
+read_csv(ifr_filepath) %>% group_by(agegroup) %>% 
+  summarise(agegroup=unique(agegroup),mean=mean(mean)/1e2,CI95_lower=mean(CI95_lower)/1e2,CI95_upper=mean(CI95_upper)/1e2) %>% 
+  mutate(agegroup_min=ifelse(grepl("-|\\+",agegroup),as.numeric(sapply(strsplit(agegroup,"-|\\+"),function(x) {x[1]})),NA ),
+         agegroup_max=ifelse(grepl("-",agegroup),as.numeric(sapply(strsplit(agegroup,"-"),function(x) {x[2]})),NA ) ) %>% 
+  filter(!is.na(agegroup_min))
+}
+
+### load cntr age struct, merge age groups above a cutoff ---------------------------
+fcn_load_age_str <- function(cntrval,cutoff_age){
+data.frame(agegroup=popF[popF$name %in% cntrval,"age"],
+  value=(popF[popF$name %in% cntrval,"2020"] + popM[popM$name %in% cntrval,"2020"])*1e3) %>%  
+  mutate(agegroup_min=ifelse(grepl("-|\\+",as.character(agegroup)),
+                             as.numeric(sapply(strsplit(as.character(agegroup),"-|\\+"),function(x) {x[1]})),NA),
+         agegroup_max=ifelse(grepl("-|\\+",as.character(agegroup)),
+                             as.numeric(sapply(strsplit(as.character(agegroup),"-|\\+"),function(x) {x[2]})),NA),
+  agegroup=ifelse(agegroup_min<cutoff_age,as.character(agegroup),paste0(cutoff_age,"+"))) %>% group_by(agegroup) %>% 
+  summarise(agegroup=unique(agegroup),value=sum(value),agegroup_min=unique(agegroup_min)[1],agegroup_max=max(agegroup_max)) %>%
+    mutate(agegroup_max=ifelse(is.na(agegroup_max),agegroup_min+4,agegroup_max),agegroup_mean=(agegroup_min+agegroup_max+1)/2) %>%
+    rename(agegroupsize=value) %>% arrange(agegroup_min)
+}
+
+### merge IFRs above a given age (typically 75) ---------------------------
+fcn_merge_ifr_above_age <- function(age_ifr_data,cutoff_age){
+  age_ifr_data %>% mutate(agegroup=ifelse(agegroup_min<cutoff_age,as.character(agegroup),paste0(cutoff_age,"+"))) %>% 
+    group_by(agegroup) %>% 
+    summarise(mean=sum(mean*agegroupsize/sum(agegroupsize)),agegroup=unique(agegroup)[1],
+          agegroup_mean=sum(agegroup_mean*agegroupsize/sum(agegroupsize)),agegroupsize=sum(agegroupsize)) %>% arrange(agegroup_mean)
+}
+
+### get_OxCGRT -----------------------------
+
+fcn_get_OxCGRT <- function(OxCGRT_url,cntr_name){
+  OxCGRT_sel=subset(read_csv(OxCGRT_url),CountryName %in% cntr_name)
+  # PLOT
+  sel_cols=(unlist(lapply(OxCGRT_sel,class)) %in% "numeric") & !grepl("Confirmed|_|Legacy|ForDisplay",colnames(OxCGRT_sel))
+  #   theme(legend.text=element_text(size=6),legend.position = "bottom")
+  #
+  OxCGRT_sel[,"date"]=as.Date(paste(sapply(strsplit(as.character(OxCGRT_sel$Date), "(?<=[0-9]{4})", perl=TRUE), "[[",1),
+                                    sapply(strsplit(sapply(strsplit(as.character(OxCGRT_sel$Date), "(?<=[0-9]{4})", perl=TRUE), "[[",2), 
+                                                    "(?<=[0-9]{2})", perl=TRUE),function(x){paste(x,collapse="-")}),sep="-"))
+  OxCGRT_sel[,"NPI_on"]=0; OxCGRT_sel$NPI_on[min(which(OxCGRT_sel$StringencyIndex>0)):nrow(OxCGRT_sel)]=1
+  # timespan of model
+  OxCGRT_sel=merge(data.frame(date=seq(as.Date("2019-11-01"),max(OxCGRT_sel$date),1)),
+                   OxCGRT_sel[,c("date","StringencyIndex","NPI_on")],by="date",all=TRUE)
+  OxCGRT_sel$StringencyIndex[1:which.min(is.na(OxCGRT_sel$StringencyIndex))-1]=0
+  OxCGRT_sel=OxCGRT_sel[!is.na(OxCGRT_sel$StringencyIndex),]; OxCGRT_sel$NPI_on[is.na(OxCGRT_sel$NPI_on)]=0
+  # need to convert it into [0,1] to scale susceptibility (assume: pre-data period had not restrictions)
+  OxCGRT_sel[,"OxCGRT_scaled"]=1-(OxCGRT_sel$StringencyIndex)/100 # timespan_dates=OxCGRT_sel$date
+  OxCGRT_sel
+}
 
 ### plot single simulation
 fcn_plot_singlesim_separ_vars <- function(dfplot,NPI_input,popultot){
@@ -574,57 +702,70 @@ df_plot = dfplot %>% mutate(case_death_var_spec=ifelse((case_death_var %in% "cas
           value_abs_fract_cond=ifelse((case_death_var %in% "case")|(cumul_trans_var %in% "cumul"),100*value/popultot,value))
 ggplot(df_plot, aes(x=date,y=value_abs_fract_cond,group=name,color=name)) + geom_line(aes(linetype=state_delta_var),size=1.25) +
   scale_linetype_manual(values=c("twodash","solid")) + facet_wrap(cumul_trans_var~case_death_var_spec,scales="free",ncol=2) +
-  theme_bw() + standard_theme + theme(legend.position="top") + geom_vline(xintercept=as.Date(unique(df_plot$introd_date)),color="red") + 
+  theme_bw() + standard_theme + theme(legend.position="top") + 
+  geom_vline(xintercept=as.Date(unique(df_plot$introd_date)),color="red") + 
   geom_vline(xintercept=as.Date(NPI_input$date[min(which(NPI_input$NPI_on>0))]),color="green") + 
   scale_x_date(date_breaks="2 weeks",expand=expansion(0.01,0)) + xlab('time (days)') + ylab(('')) + 
-  labs(linetype="variables",color="variables") + labs(title=paste('SIR model, introduction date:',unique(df_plot$introd_date), 
+  labs(linetype="variables",color="variables") + labs(title=paste('introduction date:',unique(df_plot$introd_date), 
       ", initial import (E):",df_plot$seed_size,"/day for ",unique(df_plot$seeding_duration)," days"),
       subtitle=paste0("R0=",round(unique(df_plot$R0),2),", compliance=",df_plot$npi_compliance,
-                                                                 ", IFR (all inf.)=",round(1e2*df_plot$IFR_all_inf,2),"%") )
+                                                                 ", IFR (sympt)=",round(1e2*df_plot$IFR_sympt,2),"%") )
 }
 
 ### calc R0 ----------------------
-fcn_calc_R0 <- function(beta,ddeath,drecov,IFR){ beta*((1-IFR)/drecov + IFR/ddeath) }
+# fcn_calc_R0 <- function(beta,ddeath,drecov,IFR){ beta*((1-IFR)/drecov + IFR/ddeath) }
 
 ### calc attack rate and cumul death rate ----------------------
-fcn_attack_death_rate <- function(df,plot_flag,y_breaks_lims){
+fcn_attack_death_rate <- function(df,recov_var,plot_flag,y_breaks_lims){
+  if (recov_var=="R"){
   df_output = subset(df,t %in% c(min(t),max(t)) & cumul_trans_var=="cumul")[,1:3] %>% 
     pivot_wider(names_from=c(name),values_from=value) %>% mutate(attack_rate=c(0,sum(c(R[t==max(t)],D[t==max(t)]))/S[t==min(t)]),
                                                                  cumul_death_rate=c(0,D[t==max(t)]/S[t==min(t)]))
+  } else if (recov_var=="R_recov") {
+    df_output = subset(df,t %in% c(min(t),max(t)) & cumul_trans_var=="cumul")[,1:3] %>% 
+      pivot_wider(names_from=c(name),values_from=value) %>% mutate(attack_rate=c(0,sum(c(R_recov[t==max(t)],D[t==max(t)]))/S[t==min(t)]),
+                                                  cumul_death_rate=c(0,D[t==max(t)]/S[t==min(t)]))}
   if (plot_flag=="plot"){
   ggplot(subset(df_output,t==max(t)) %>% select(t,attack_rate,cumul_death_rate) %>% 
     pivot_longer(cols=c(attack_rate,cumul_death_rate))) + geom_segment(aes(x=0,xend=0+1,y=value*1e2,yend=value*1e2,color=name),size=2) +
     theme_bw() + standard_theme + scale_x_continuous(breaks=NULL) + xlab("") + ylab("%") + labs(color="") +
-    scale_y_log10(breaks=y_breaks_lims[[1]],limits=y_breaks_lims[[2]]) + geom_text(aes(y=1.1*value*1e2,label=round(value*1e2,2)),x=0.5) }
+    scale_y_log10(breaks=y_breaks_lims$breaks,limits=y_breaks_lims$limits) + 
+      geom_text(aes(y=1.1*value*1e2,label=round(value*1e2,2)),x=0.5) }
   else if (grepl("calc",plot_flag)){df_output} else {print("choose <calc> or <plot>")}
 }
 
 ### plot single simul vs data -----------------
-fcn_plot_singlesim_data_error_deaths <- function(df,out_bdr_daily_estimates,baselineburialrate,
-                                                death_rate_percap,n_per_persday,popul,plot_flag){
-  scale_factor=baselineburialrate/(death_rate_percap*popul/n_per_persday)
-  # rmse
-  singlesim_comp=left_join(subset(df,name %in% "new_deaths")[,c("date","value")] %>% rename(value_simul=value) %>% 
-      mutate(value_simul=value_simul) %>% mutate(value_simul_scaled=value_simul*scale_factor), # round(
-      out_bdr_daily_estimates[,c("date","rollmeanweek")] %>% rename(value_data=rollmeanweek) %>% mutate(value_data=value_data),by="date") %>% 
-      mutate(sq_error=(value_data-value_simul_scaled)^2,mae=abs(value_data-value_simul_scaled)) %>% 
-    filter(!is.na(value_data))
-  rmse=sqrt(mean(singlesim_comp$sq_error))
+fcn_plot_singlesim_data_error_deaths <- function(df,outbdrdailyestimates,selvars,NPI_input,baselineburialrate,
+                                                death_rate_percap,n_per_persday,popul,datelims,plot_flag){
+scale_factor=baselineburialrate/(death_rate_percap*popul/n_per_persday)
+# rmse
+singlesim_comp=left_join(subset(df,name %in% selvars)[,c("t","date","value")] %>% filter(t %% 1==0) %>% 
+    rename(value_simul=value) %>% mutate(value_simul=value_simul) %>% mutate(value_simul_scaled=value_simul*scale_factor),
+    outbdrdailyestimates[,c("date","rollmeanweek")] %>% rename(value_data=rollmeanweek) %>% mutate(value_data=value_data),by="date") %>% 
+    mutate(sq_error=(value_data-value_simul_scaled)^2,mae=abs(value_data-value_simul_scaled)) %>% 
+    filter(!is.na(value_data)) # rmse=sqrt(mean(singlesim_comp$sq_error))
   
   if (nchar(plot_flag)==0){rmse } else {
   ggplot(singlesim_comp[,c("date","value_simul_scaled","value_data")] %>% pivot_longer(col=!date),aes(x=date,y=value,color=name)) + 
-    geom_line() + geom_point() + scale_x_date(date_breaks="1 week",expand=expansion(0.01,0)) + scale_y_continuous(expand=expansion(0.01,0)) + 
-    theme_bw() + standard_theme + ggtitle(paste0("MAE=",round(mean(singlesim_comp$mae),2)))}
+    geom_line() + geom_point() + scale_x_date(date_breaks="1 week",expand=expansion(0.01,0),limits=as.Date(datelims)) + 
+    scale_y_continuous(expand=expansion(0.01,0)) + theme_bw() + standard_theme + ggtitle(paste0("MAE=",round(mean(singlesim_comp$mae),2))) + 
+      labs(caption=paste('introduction date:',unique(df$introd_date), ", initial import (E):",df$seed_size,"/day for ",
+      unique(df$seeding_duration)," days"),subtitle=paste0("R0=",round(unique(df$R0),2),", compliance=",df$npi_compliance,
+        ", IFR (all inf.)=",round(1e2*df$IFR_sympt,2),"%") ) + geom_vline(xintercept=as.Date(unique(df$introd_date)),color="red") + 
+      geom_vline(xintercept=as.Date(NPI_input$date[min(which(NPI_input$NPI_on>0))]),color="green")
+    }
 }
 
 ### plot peak dates cases vs deaths of single simul --------------
-fcn_plot_peakdates <- function(df_plot,datelims){
-  peak_dates=subset(df_plot[[1]],name %in% c("new_infections","new_deaths")) %>% group_by(name) %>% 
-    summarise(maxval_date=date[value==max(value,na.rm=T)])
-  ggplot(subset(df_plot[[1]], name %in% c("new_infections","new_deaths")),aes(x=date,y=value,group=name,color=name)) + geom_line() +
-    geom_point() + scale_x_date(limits=as.Date(datelims),date_breaks="1 week",expand=expansion(0.01,0)) + scale_y_log10() +
-    geom_vline(data=peak_dates,aes(xintercept=maxval_date,color=name)) + labs(color="peak of infections/deaths") + 
-    theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5))
+fcn_plot_peakdates <- function(df_plot,datelims,datebreakval,sel_vars,yminval,logflag){
+  peak_dates=subset(df_plot,name %in% sel_vars) %>% group_by(name) %>% summarise(maxval_date=date[value==max(value,na.rm=T)])
+  peakplot <- ggplot(subset(df_plot, name %in% sel_vars) %>% filter(t %% 1 ==0),aes(x=date,y=value,group=name,color=name)) + geom_line() +
+    geom_point() + scale_x_date(limits=as.Date(datelims),date_breaks=datebreakval,expand=expansion(0.01,0)) +
+    geom_vline(data=peak_dates,aes(xintercept=maxval_date,color=name),size=1.5) + labs(color="peak of infections/deaths") + 
+    theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5)) 
+   if (nchar(logflag)>0)  {
+     peakplot <- peakplot+ scale_y_log10(limits=c(yminval,max(subset(df_plot,name %in% sel_vars)$value)),expand=expansion(0.01,0))}
+  peakplot
 }
 
 ### best paramsets  --------------
@@ -673,8 +814,8 @@ ggplot(subset(dfplot,date>=plotdatelims[1] & date<plotdatelims[2])) +
 }
 
 ### param scan parallel or sequential --------------
-fcn_paramscan_parallel_seq <- function(paral_seq,k_lim,sir_varnames,var_categ_list,timesteps,paramtable,transm_pars,clinfract,OxCGRT_input,
-                                       N_tot,subpopul,filterdates,parnames_number){
+fcn_paramscan_parallel_seq <- function(paral_seq,k_lim,sir_varnames,varcateglist,timesteps,paramtable,transm_pars,clinfract,
+                                       OxCGRT_input,N_tot,subpopul,filterdates,parnames_number){
   g(d_c,d_e,d_death,seed_dur) %=% transm_pars
   if (k_lim=="full"){k_lim=nrow(paramtable); print(paste0(nrow(paramtable)," parsets"))}
   
@@ -682,7 +823,7 @@ fcn_paramscan_parallel_seq <- function(paral_seq,k_lim,sir_varnames,var_categ_li
     fcn_somal_sir_singlesimul<-.GlobalEnv$fcn_somal_sir_singlesimul
     df_output <- foreach(k=1:k_lim,.combine=rbind,.packages=c("tidyr","deSolve","dplyr","RcppRoll")) %dopar% {
       # RUN & process output
-      temp<-fcn_somal_sir_singlesimul(sir_varnames,var_categ_list,timesteps,paramtable$introd_date_scanvals[k],
+      temp<-fcn_somal_sir_singlesimul(sir_varnames,varcateglist,timesteps,paramtable$introd_date_scanvals[k],
                              c("beta"=paramtable$betaval[k],"gamma"=1/d_c,"sigma"=1/d_e,"d_death"=1/d_death,"IFR"=paramtable$IFR[k]), 
                              "clin_fract"=clinfract,"seed_size_val"=paramtable$seedsize_scanvals[k],"seeding_duration"=seed_dur,
                              OxCGRT_input,compliance=paramtable$compliance[k], subpopul*N_tot/sum(N_tot),c(),"")[[1]] %>% 
@@ -693,7 +834,7 @@ fcn_paramscan_parallel_seq <- function(paral_seq,k_lim,sir_varnames,var_categ_li
     df_output=list()
     for (k in 1:k_lim) { # nrow(paramtable)
       # RUN & process output
-  df_ode_solution=fcn_somal_sir_singlesimul(sir_varnames,var_categ_list,timesteps,day0=paramtable$introd_date_scanvals[k],
+  df_ode_solution=fcn_somal_sir_singlesimul(sir_varnames,varcateglist,timesteps,day0=paramtable$introd_date_scanvals[k],
     num_params=c(beta=paramtable$betaval[k],gamma=1/d_c,sigma=1/d_e,d_death=1/d_death,IFR=paramtable$IFR[k]),
     clin_fract=clinfract,seed_size_val=paramtable$seedsize_scanvals[k],seeding_duration=transm_pars["seeding_duration"],
     OxCGRT_input,compliance=paramtable$compliance[k], N_tot*mogadishu_popul/sum(N_tot),c(),"")[[1]] %>% filter(name %in% "new_deaths") %>%

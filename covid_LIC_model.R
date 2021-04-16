@@ -37,7 +37,7 @@ C_m=fun_contmatr_recipr(C_m_orig,N_tot)
 d_e=1/3; d_p=1/2; d_c=1/3; d_s=1/5; infect_first_ord_pars=c(d_e,d_p,d_c,d_s)
 ########################################################
 ### single simulation with COVIDM ---------------------------
-params=cm_parameters_SEI3R(gsub("Sudan","Ethiopia",countryval))
+params=cm_parameters_SEI3R(gsub("Sudan|Somalia","Ethiopia",countryval))
 target_R0=2.4; scale_r0=target_R0/cm_calc_R0(params,1)
 # scale susceptibility
 for (k in 1:length(params$pop)){ params$pop[[k]]$u=params$pop[[k]]$u*scale_r0}

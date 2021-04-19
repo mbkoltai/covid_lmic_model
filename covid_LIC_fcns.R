@@ -74,9 +74,9 @@ fcn_covidm_df <- function(lmic_simul,sel_vars,pars){   # c("S","E","Ip","Is","R"
 fcn_covidm_process_output <- function(run_dynamics,filter_vars,compartm_types_val,dynamics_type_val,populval,modelparams){
 df_sim=subset(run_dynamics,!compartment %in% filter_vars)%>% select(!run) %>% group_by(t,compartment) %>% summarise(value=sum(value))
 bind_rows(df_sim, subset(df_sim,compartment %in% "death_o") %>% 
-        group_by(compartment) %>% mutate(value=cumsum(value),compartment="D") ) %>% mutate(value_perc_pop=value/populval,
-        compartm_type=sapply(compartment,function(k) names(compartm_types_val)[sapply(compartm_types_val,function(x) sum(x %in% k))==1]),
-        dynam_type=sapply(compartment,function(k) names(dynamics_type_val)[sapply(dynamics_type_val,function(x) sum(x %in% k))==1]) ) %>%
+    group_by(compartment) %>% mutate(value=cumsum(value),compartment="D") ) %>% mutate(value_perc_pop=value/populval,
+    compartm_type=sapply(compartment,function(k) names(compartm_types_val)[sapply(compartm_types_val,function(x) sum(x %in% k))==1]),
+    dynam_type=sapply(compartment,function(k) names(dynamics_type_val)[sapply(dynamics_type_val,function(x) sum(x %in% k))==1]) ) %>%
   mutate(date=seq(as.Date(modelparams$date0),as.Date(modelparams$time1),1)[t+1]) %>%  ungroup()
 }
 

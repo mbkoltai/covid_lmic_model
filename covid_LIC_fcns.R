@@ -4,14 +4,11 @@ fun_sub2ind_seir_agestr=function(j_age,varname,varname_list,n_var,n_age){
 
 # generate all model names ----------------------------------------------------------
 fun_seir_agestr_varnames=function(varname_list,n_age){
-  array( sapply(1:n_age, function(x_age) {sapply(varname_list, function(x) {paste0(x,'_',x_age)}) } ) )
+  array(sapply(1:n_age, function(x_age) {sapply(varname_list, function(x) {paste0(x,'_',x_age)}) } ) )
 }
 
 ### function to have COVIDM incidence outputs
-cm_multinom_process <- function(
-  src, outcomes, delays,
-  report = ""
-) {
+cm_multinom_process <- function(src, outcomes, delays, report="") {
   if ("null" %in% names(outcomes)) {
     if (length(report) != length(outcomes)) report <- rep(report, length(outcomes))
     report[which(names(outcomes)=="null")] <- ""
@@ -82,13 +79,41 @@ bind_rows(df_sim, subset(df_sim,compartment %in% "death_o") %>%
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 ### plot single simul and calc error -----------------
-fcn_covidm_singlesim_error <- function(covidmsimul,df_data,fitting_dates){
+fcn_covidm_singlesim_error <- function(covidmsimul,intr_date,seedsize,df_data,fitting_dates){
   df_data_simul_deaths=left_join(subset(covidmsimul %>% rename(simul=value),compartment %in% "death_o")%>% select(date,simul),
         df_data %>% select(date,daily_baseline_subtr) %>% rename(data=daily_baseline_subtr)) %>% pivot_longer(!date)
 abs_err=subset(df_data_simul_deaths, date >= fitting_dates[1] & date <= fitting_dates[2]) %>% group_by(date) %>%
   summarise(data=value[name=="data"],diff=value[name=="data"]-value[name=="simul"],sumval=sum(value),mae=abs(diff))
 ggplot(df_data_simul_deaths,aes(x=date)) + geom_line(aes(y=value,group=name,color=name)) + theme_bw() + standard_theme + 
-  ggtitle(paste0("MAE=",round(mean(abs_err$mae),2))) + scale_x_date(limits = fitting_dates)
+  ggtitle(paste0("MAE=",round(mean(abs_err$mae),2), ", introd date: ", intr_date, ", seedsize=", sum(seedsize))) + 
+  scale_x_date(limits = fitting_dates,date_breaks="2 weeks",expand=expansion(0.01,0)) + scale_y_continuous(expand=expansion(0.01,0))
+}
+
+### ### ### ### 
+cm_plot_posterior_mod <- function(fit,plot_params)
+  {  if (!any("cm.fit" %in% class(fit))) {
+    stop("cm_plot_posterior requires a cm.fit object.")  }
+  
+  # get prior distributions
+  priors = NULL;
+  for (pr in 1:length(fit$priors)) {
+    ep = cm_evaluate_distribution(fit$priors[[pr]]);
+    setDT(ep);
+    ep[, p := p / max(p)]
+    ep[, parameter := names(fit$priors)[pr]];
+    priors = rbind(priors, ep);
+  }
+  posterior = melt(fit$posterior, id.vars = NULL, measure.vars = 5:ncol(fit$posterior), variable.name = "parameter");
+  
+  # put in correct order
+  priors[, parameter := factor(parameter, levels = names(fit$priors))]
+  posterior[, parameter := factor(parameter, levels = names(fit$priors))]
+  
+  # plot
+  ggplot() + geom_line(data=priors, aes(x=x, y=p), linetype="22", size = plot_params$line_width) + # prior
+    geom_histogram(data = posterior, aes(value, y=stat(ndensity), fill=parameter), alpha=0.75,bins=plot_params$n_bin) +
+    facet_wrap(~parameter, scales = "free") +     labs(x = NULL, y = NULL) + ggtitle(paste0("CDR=",round(plot_params$cdr_val,3))) +
+    theme(legend.position = "none", strip.background = element_blank()) + theme_bw() + standard_theme
 }
 
 ### generate matrices to scale force of infection terms ---------
@@ -119,8 +144,8 @@ standard_theme=theme(# panel.grid=element_line(linetype="dashed",colour="black",
                      legend.title=element_text(size=14),legend.text=element_text(size=12),
                      axis.title=element_text(size=14), text=element_text(family="Calibri"))
 ### colors ----
-library(wesanderson) # install.packages("wesanderson")
-pal <- wes_palette("Zissou1", 100, type = "continuous")
+# library(wesanderson) # install.packages("wesanderson")
+# pal <- wes_palette("Zissou1", 100, type = "continuous")
 
 ### seir model without age struct
 seir_ode <- function(t,X,parms){ 
@@ -300,62 +325,6 @@ g
 # SAVE
 }
 
-#### parameter scan for one parameter & country ----------------------
-# fun_paramscan_singlepar=function(age_dep_paramtable,scan_parameter,infect_first_ord_pars,infect_vartype,vartype_list,
-#                                  C_m, inf_initval,init_inf_age_groups,init_inf_vartype,N_tot,n_years,age_groups){
-#   n_age=nrow(C_m)
-#   scan_param=c("u_val","y_val","f_val")[sapply(c("susc","clin","infect"), function(x) {grepl(x,scan_parameter)})]
-#   midvalue_agedep=round(median(unique(age_dep_paramtable$dep_fact)))
-#   age_dep_paramtable_red=age_dep_paramtable[(age_dep_paramtable$name %in% scan_param) | 
-#                                     ((!age_dep_paramtable$name %in% scan_param) & age_dep_paramtable$dep_fact==midvalue_agedep),]
-#   for (age_dep_val in unique(age_dep_paramtable$dep_fact)){
-#     if (sum(unique(age_dep_paramtable_red$dep_fact[age_dep_paramtable_red$name %in% "u_val"]) %in% age_dep_val)){
-#       k_u=age_dep_val} else {k_u=midvalue_agedep}
-#     if (sum(unique(age_dep_paramtable_red$dep_fact[age_dep_paramtable_red$name %in% "y_val"]) %in% age_dep_val)){
-#       k_y=age_dep_val} else {k_y=midvalue_agedep}
-#     if (sum(unique(age_dep_paramtable_red$dep_fact[age_dep_paramtable_red$name %in% "f_val"]) %in% age_dep_val)){
-#       k_f=age_dep_val} else {k_f=midvalue_agedep}
-#   u_val=age_dep_paramtable$value[age_dep_paramtable$dep_fact==k_u & age_dep_paramtable$name %in% "u_val"]
-#   y_val=age_dep_paramtable$value[age_dep_paramtable$dep_fact==k_y & age_dep_paramtable$name %in% "y_val"]
-#   f_val=age_dep_paramtable$value[age_dep_paramtable$dep_fact==k_f & age_dep_paramtable$name %in% "f_val"]
-#   # constant transmission parameters
-#   # d_e=1/4; d_p=1/1.5; d_c=1/3.5; d_s=1/5; infect_first_ord_pars=c(d_e,d_p,d_c,d_s)
-#   # KINETIC MATRIX (LINEAR TERMS)
-#   K_m=fun_seir_agestr_kinmatr(infect_vartype,vartype_list,n_age,infect_first_ord_pars,y_val)
-#   # vectors to scale FORCE of INFECTION terms
-#   list_bm_am=fun_force_inf_vects(vartype_list,forceinf_vars=c("S","E"),n_age,f_val,N_tot); b_m_full=list_bm_am[[1]]; a_m=list_bm_am[[2]]
-#   # inf vector is: b_m_full %*% diag(c(1,2)) %*% C_m %*% diag(u_val) %*% a_m %*% matrix(1,8,1)
-#   l=fun_inds_vartypes(n_age,vartype_list,infect_vartype); ind_all_inf_vars=l[[1]]; ind_all_susceptibles=l[[2]]
-#   # INITIAL CONDITIONS
-#   # seed epidemic by "E">0 in a given (or multiple) age groups
-#   initvals_seir_model=fcn_set_init_conds(inf_initval,init_inf_age_groups,init_inf_vartype,n_age,N_tot,
-#                                          vartype_list,ind_all_susceptibles)
-#   ### run ODEs ----------------------------
-#   # time resolution and duration
-#   # n_days_year=365; n_years=1; 
-#   max_time=n_years*365; timesteps <- seq(0,max_time,by=0.25)
-#   # define inputs for ODE fcn
-#   params=list(K_m, C_m, b_m_full, u_val, a_m, ind_all_susceptibles, ind_all_inf_vars)
-#   # RUN # 
-#   ode_solution<-lsoda(initvals_seir_model,timesteps,func=seir_agestr_ode,parms=params)
-#   print(paste("u (susc)=[",round(u_val[1]/(10^floor(log10(u_val[1]))),2),"e",floor(log10(u_val[1])), 
-#    round(u_val[length(u_val)]/(10^floor(log10(u_val[length(u_val)]))),2),"e",floor(log10(u_val[length(u_val)])),"] mean=",
-#    round(mean(u_val)/(10^floor(log10(mean(u_val)))),2),"e",floor(log10(mean(u_val))), "|",
-#               "y (clinfrac) =[",round(y_val[1],3),round(y_val[length(y_val)],3),"] mean=",round(mean(y_val),2),"|",
-#               "f (inf asym) =[",round(f_val[1],3),round(f_val[length(f_val)],3),"] mean=",round(mean(f_val),2), sep=" "))
-#   # PROCESS OUTPUT
-#   l_proc_sol=fcn_proc_ode_output(ode_solution,full_varname_list,ind_all_inf_vars); df_ode_solution=l_proc_sol[[1]]
-#   # infected fraction of popul (HIT)
-#   attack_rate=fun_attackrate_df_calc(df_ode_solution,N_tot,age_dep_val,y_val)
-#   # print(attack_rate)
-#   if (age_dep_val==0) {scan_table=attack_rate} else {scan_table=rbind(scan_table,attack_rate)}
-#   } # end of for loop
-#   scan_table[,"agegroup_names"]=factor(paste(age_groups$age_low,age_groups$age_high,sep = "-")[as.numeric(sapply(strsplit(as.character(
-#     scan_table$age_group),"_"),"[[",2))],levels=paste(age_groups$age_low,age_groups$age_high,sep = "-"))
-#   colorvar="col_scale"; scan_table[,colorvar]=factor(scan_table$par_scale)
-#   scan_table
-# }
-
 ### param scan for single parameter with COVIDM
 
 fun_paramscan_singlepar=function(countryval,age_dep_paramtable,scan_parameter,sel_vars,n_years,age_groups){
@@ -449,46 +418,6 @@ fcn_extract_optimresults <- function(optim_proc,parnames){
   optim_outputs
 }
 
-### parameter scan for multiple parameters and countries (own model) --------------------------------
-# fun_onedim_multipar_multicntr_scan=function(cntr_list,year_str,age_groups,cm_path,scan_param_fullname,n_loop,
-#                                      agedep_param_lims,infect_first_ord_pars,infect_vartype,vartype_list,
-#                                      inf_initval,init_inf_age_groups,init_inf_var,n_years){
-#   g(midpoint_susc,delta_susc,rep_min_susc,rep_max_susc,midpoint_clinfract,
-#     delta_clinfr,rep_min_clinfr,rep_max_clinfr) %=% agedep_param_lims
-#   age_dep_paramtable=fun_agedep_partable(agedep_param_lims,n_loop)
-# for (k_cntr in 1:length(cntr_list)){countryval=cntr_list[k_cntr]; N_tot=fun_cntr_agestr(countryval,i_year=year_str,age_groups) 
-# # uniform: N_tot=rep(1e6,n_age)
-# # CONTACT MATRIX
-# if (!exists("covid_params")){cm_force_rebuild=F;cm_build_verbose=T;cm_version=2; source(file.path(cm_path,"R","covidm.R"))}
-# covid_params=cm_parameters_SEI3R(gsub("Sudan","Ethiopia",countryval))
-# C_m=Reduce('+',covid_params$pop[[1]]$matrices); C_m=fun_contmatr_recipr(C_m,N_tot); n_age=nrow(C_m)
-# numchars=paste0(as.character(round(c(sum(N_tot)/1e6,median(C_m),max(Re(eigen(C_m)$values))),1)),collapse = "," )
-# print(paste0(countryval," [popul,median(C_m),max(eigval(C_m))] = [",numchars,"]"))
-# # scan in parameter
-# # scan_param_fullname=c("susceptibility","clinical fraction","asymptomatic infectiousness")
-# # c("u_val","y_val","f_val")
-# for (k_par in 1:length(scan_param_fullname)){ # n_loop=6
-# attack_rates_scan=fun_paramscan_singlepar(age_dep_paramtable,scan_parameter=scan_param_fullname[k_par],infect_first_ord_pars,
-#                   infect_vartype,vartype_list,C_m,inf_initval,init_inf_age_groups,init_inf_var,N_tot,n_years,age_groups)
-# attack_rates_scan[,"scanpar"]=scan_param_fullname[k_par]; if (k_par==1){attack_rates_scan_multipar=attack_rates_scan} else {
-#   attack_rates_scan_multipar=rbind(attack_rates_scan_multipar,attack_rates_scan)} }
-# # long format
-# attack_rates_scan_multipar[,"country"]=countryval; att_colns=colnames(attack_rates_scan_multipar)
-# attack_rates_scan_multipar=attack_rates_scan_multipar %>% pivot_longer(!att_colns[!grepl("attack",att_colns)],values_to="fract_agegroup")
-# # case numbers
-# attack_rates_scan_multipar[,"agegr_pop"]=rep(as.vector(t(matrix(rep(N_tot,2),ncol=2))),
-#                                     nrow(attack_rates_scan_multipar)/length(as.vector(t(matrix(rep(N_tot,2),ncol=2)))))
-# attack_rates_scan_multipar[,"n_case"]=round(attack_rates_scan_multipar$agegr_pop*attack_rates_scan_multipar$fract_agegroup,1)
-# attack_rates_scan_multipar[,"per_1000_popul"]=round(1e3*attack_rates_scan_multipar$n_case/sum(N_tot),1)
-# 
-# if (k_cntr==1) {attack_rates_multipar_multicntr=attack_rates_scan_multipar} else {
-#   attack_rates_multipar_multicntr=rbind(attack_rates_multipar_multicntr,attack_rates_scan_multipar)}
-# } # end of for loop for cntrs
-#   attack_rates_multipar_multicntr=attack_rates_multipar_multicntr %>% group_by(par_scale,scanpar,name,country) %>% 
-#     mutate(fraction_cases=n_case/sum(n_case))
-#   attack_rates_multipar_multicntr
-# }
-
 ### calculate NGM and R0 -----------------
 fun_NGM_R0=function(C_m,N_tot,y_val,u_val,f_val,lin_rates){
 NGM=matrix(0,nrow=length(N_tot),ncol=length(N_tot)); g(d_p,d_c,d_s) %=% lin_rates
@@ -548,32 +477,6 @@ R0_scan[,"susc_str"]=factor(paste0("suscept agedep=",round(R0_scan$susc/k_max,2)
 R0_scan[,"country"]=countryval
 R0_scan
 }
-
-### ODE fcns for somalia model
-# simple_sir_somalia_interpol <- function(t,x,parms) {
-#   S<-x[1]; E<-x[2]; I_C<-x[3]; I_CR<-x[4]; I_CD=x[5]; R=x[6]; D=x[7]
-#   with(as.list(c(x,parms)), {
-#     beta_variable=beta_eff*input_npi(t); force_inf=beta_variable*(I_C + I_CR + sever_inf*I_CD)
-#     force_inf=beta_variable*(I_C + I_CR + sever_inf*I_CD)
-#     dS = -S*force_inf; dE = S*force_inf - d_e*E + input_seeding(t)*inv_timestep
-#     dI_C=d_e*E - k_fast*I_C; dI_CR=(1-IFR_estim)*k_fast*I_C - d_cr*I_CR; dI_CD=IFR_estim*k_fast*I_C - d_cd*I_CD
-#     dR=d_cr*I_CR; dD=d_cd*I_CD; cumulinf=d_e*E  # infect who'll recover or die
-#     return(list(c(dS,dE,dI_C,dI_CR,dI_CD,dR,dD,cumulinf)))
-#   }) }
-#
-#
-# simple_sir_somalia_interpol <- function(t,x,parms) {
-#   S<-x[1]; E<-x[2]; I_C<-x[3]; I_CR<-x[4]; I_CD=x[5]; I_S=x[6]; R=x[7]; D=x[8]
-#   with(as.list(c(x,parms)), {
-#     beta_variable=beta_eff*input_npi(t); force_inf=beta_variable*(I_C + I_CR + sever_inf*I_CD + f_asympt*I_S); d_s=d_cr
-#     dS = -S*force_inf; dE = S*force_inf - d_e*E + input_seeding(t)*inv_timestep
-#     dI_C=symptshare*d_e*E - k_fast*I_C
-#     dI_CR=(1-IFR_estim)*k_fast*I_C - d_cr*I_CR
-#     dI_CD=IFR_estim*k_fast*I_C - d_cd*I_CD
-#     dI_S=(1-symptshare)*d_e*E - d_s*I_S
-#     dR=d_cr*I_CR + d_s*I_S; dD=d_cd*I_CD; cumul_sympt_inf=symptshare*d_e*E; cumul_asympt_inf=(1-symptshare)*d_e*E  
-#     return(list(c(dS,dE,dI_C,dI_CR,dI_CD,dI_S,dR,dD,cumul_sympt_inf,cumul_asympt_inf)))
-#   }) }
 
 # ODE fcn 
 simple_sir_somalia_interpol <- function(t,x,parms) {
@@ -652,9 +555,9 @@ read_csv(ifr_filepath) %>% group_by(agegroup) %>%
 }
 
 ### load cntr age struct, merge age groups above a cutoff ---------------------------
-fcn_load_age_str <- function(cntrval,cutoff_age){
+fcn_load_age_str <- function(cntrval,n_year,cutoff_age){
 data.frame(agegroup=popF[popF$name %in% cntrval,"age"],
-  value=(popF[popF$name %in% cntrval,"2020"] + popM[popM$name %in% cntrval,"2020"])*1e3) %>%  
+  value=(popF[popF$name %in% cntrval,n_year] + popM[popM$name %in% cntrval,n_year])*1e3) %>%  
   mutate(agegroup_min=ifelse(grepl("-|\\+",as.character(agegroup)),
                              as.numeric(sapply(strsplit(as.character(agegroup),"-|\\+"),function(x) {x[1]})),NA),
          agegroup_max=ifelse(grepl("-|\\+",as.character(agegroup)),
@@ -711,9 +614,6 @@ ggplot(df_plot, aes(x=date,y=value_abs_fract_cond,group=name,color=name)) + geom
       subtitle=paste0("R0=",round(unique(df_plot$R0),2),", compliance=",df_plot$npi_compliance,
                                                                  ", IFR (sympt)=",round(1e2*df_plot$IFR_sympt,2),"%") )
 }
-
-### calc R0 ----------------------
-# fcn_calc_R0 <- function(beta,ddeath,drecov,IFR){ beta*((1-IFR)/drecov + IFR/ddeath) }
 
 ### calc attack rate and cumul death rate ----------------------
 fcn_attack_death_rate <- function(df,recov_var,plot_flag,y_breaks_lims){
@@ -852,35 +752,6 @@ fcn_paramscan_parallel_seq <- function(paral_seq,k_lim,sir_varnames,varcateglist
   df_output # %>% mutate(parset_ID=group_indices(df_output,.dots=parnames_number))
 }
 
-### ### ### ### ### ### ### ### ### ### ### ###
-### heatmap of MSE ------------------------
-# PLOT
-# err_type="negbinom"; n_text=2; n_round=0
-# for (k in 1:length(scan_params$IFR)){
-# df_heatmap=subset(error_pred_data_comp,IFR==scan_params$IFR[k] & grepl(err_type,name)) #  & beta==scan_params$betaval[2]
-# colnames(df_heatmap)[grepl("npi",colnames(df_heatmap))]="npi_c"; colnames(df_heatmap)[grepl("durat",colnames(df_heatmap))]="seed_t"
-# # best 1% param sets
-# # minval_mse=min(subset(error_pred_data_comp,grepl(err_type,name))[,"value"]) 
-# min_error_limit=10^(floor(log10(sort(subset(error_pred_data_comp,grepl(err_type,name))$value)[round(0.01*nrow(error_pred_data_comp))])*10)/10 )
-# hmap_lims=summary(subset(error_pred_data_comp,grepl(err_type,name) & !is.infinite(value))$value)[c("Min.","Median","Max.")]*c(0.9,1,1.1)
-# highl_tiles=subset(df_heatmap, value<min_error_limit) # %>% select(introd_date,seed_size) # midpoint_val=2*min(df_heatmap$value)
-# # PLOT
-# ggplot(df_heatmap, aes(x=seed_size,y=introd_date,fill=value)) + geom_tile(color="black") + 
-#  geom_text(aes(label=round(value,n_round)),color="black",size=n_text) + geom_rect(data=highl_tiles,size=1,fill=NA,colour="green",
-#   aes(xmin=seed_size-unique(diff(scan_params$seedsize_scanvals))/2,xmax=seed_size+unique(diff(scan_params$seedsize_scanvals))/2,
-#   ymin=introd_date-unique(diff(scan_params$introd_date_scanvals))/2,ymax=introd_date+unique(diff(scan_params$introd_date_scanvals))/2)) +
-#   theme_bw() + standard_theme + theme(axis.text.y=element_text(size=6)) + 
-#   scale_fill_gradientn(colors=c("blue","white","red"),values=scales::rescale(array(hmap_lims))) + #,limits=c(0,hmap_lims[3]) 
-#   facet_grid(npi_c~seed_t~beta,labeller=labeller(npi_c=label_both,seed_t=label_both,beta=label_both)) + 
-#   scale_y_date(breaks=unique(df_heatmap$introd_date),expand=c(0,0)) + scale_x_continuous(breaks=unique(df_heatmap$seed_size),expand=c(0,0)) +
-#   labs(title="Error for grid search",subtitle=paste0("IFR=",unique(df_heatmap$IFR)*100,"%, error: ",
-#   gsub(gsub(err_type,"poiss","NLL, poisson"),"negbinom","NLL, neg.binom."))) + xlab("seed size") + ylab("introd. date")
-# # SAVE
-# filetag=paste0("IFR_",1e2*unique(df_heatmap$IFR),"_error_",err_type) 
-# ggsave(paste0("simul_output/somalia_output/errors/error_parscan_SIR_heatmap_",filetag,".png"),width=32,height=40,units="cm")
-# print(k)
-# }
-
 ### object size -------------- 
 fcn_objs_mem_use <- function(min_size){
   mem_use_df=round(data.frame(unlist(sapply(ls(envir=.GlobalEnv), function(n) object.size(get(n)), simplify = FALSE)))/1e6,1)
@@ -921,9 +792,7 @@ extendToMatch <- function(source, destin) {
   if(d==1 && s>1 && !is.null(as.numeric(destin)))
     d <- destin
   dif <- d - s
-  if (dif > 0) {
-    source <- rep(source, ceiling(d/s))[1:d]
-  }
+  if (dif > 0) {    source <- rep(source, ceiling(d/s))[1:d]  }
   return (source)
 }
 # Grouping the left hand side

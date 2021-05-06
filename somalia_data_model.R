@@ -13,10 +13,10 @@
 #' Load libraries, functions
 rm(list=ls()); currentdir_path=dirname(rstudioapi::getSourceEditorContext()$path); setwd(currentdir_path)
 lapply(c("tidyverse","deSolve","qs","gtools","rstudioapi","wpp2019","countrycode","coronavirus","wesanderson","dttr2","RcppRoll",
-         "scales","wpp2019"), library,character.only=TRUE) 
+         "scales","wpp2019","GGally","corrr"), library,character.only=TRUE)
 # detach("package:fitdistrplus", unload = TRUE); detach("package:MASS", unload = TRUE) # "foreach","parallel","doParallel"
 # functions and plotting theme
-source("covid_LIC_fcns.R")
+source("somalia_data_model_fcns.R")
 
 ### JHU global covid19 data ----------------
 #' ## JHU global covid19 data
@@ -80,17 +80,21 @@ df_compare_report_satell=bind_rows(weekly_deaths_reported,
   mutate(type=ifelse(!grepl("sum|mean",name),"daily",name),week=format(date,"%Y/%W")) %>%
   filter(type=="daily") %>% group_by(week,datasource) %>% 
   summarise(date=min(date),datasource=unique(datasource),name=unique(name),value=sum(value)) %>% mutate(week=gsub("/","/w",week))
-# plot
-ggplot(subset(df_compare_report_satell,date>"2020-01-15" & date<"2020-10-07"),aes(x=week,y=value,group=datasource)) + 
-  # geom_line(aes(color=datasource)) + geom_point(aes(color=datasource,shape=datasource),size=0.9) + 
-  geom_bar(aes(fill=datasource),stat="identity",position=position_dodge(width=0.75),color="black",size=0.2) + 
-  theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5)) + # facet_wrap(~type,scales="free",nrow=3) + 
- # scale_x_date(date_breaks="2 weeks",expand=expansion(0.01,0),limits=as.Date(c("2020-01-10","2020-08-17"))) +
-  scale_y_continuous(expand=expansion(0.01,0),breaks=(0:20)*5) + 
-  ggtitle(expression("weekly excess burials compared to confirmed COVID19 deaths (weekly sum)"))
+# plot # library(ungeviz)
+p <- ggplot(subset(df_compare_report_satell,date>"2020-01-15" & date<"2020-10-07"),aes(x=week,y=value,group=datasource)) + 
+  # geom_point(aes(x=week,y=value,group=datasource,color=datasource),pch="-",size=30) + 
+  geom_hpline(aes(x=week,y=value,group=datasource,color=datasource),width=0.9) + # 
+  geom_vline(xintercept=(1:length(unique(df_compare_report_satell$week)))-0.5,size=0.1,linetype="dashed") +
+  scale_color_discrete(labels=c("reported COVID19 deaths","excess burials")) +  labs(fill="",color="") +
+# geom_bar(aes(fill=datasource),stat="identity",position=position_dodge(width=0.75),color="black",size=0.2) + 
+# scale_fill_discrete(labels=c("reported COVID19 deaths","excess burials")) + 
+  theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5),legend.position=c(0.88,0.9),legend.margin=margin(0,0,0,0)) +
+  # legend.spacing.x = unit(0, "mm"),legend.spacing.y = unit(0, "mm")
+  scale_y_continuous(expand=expansion(0.01,0),breaks=(0:20)*5); p
 # SAVE
-# ggsave("simul_output/somalia/satellite_burials_reported_deaths_weekly.png",units="cm",height=15,width=25)
-# ggsave("simul_output/somalia/satellite_burials_reported_deaths_weekly_barplot.png",units="cm",height=15,width=25)
+if (any(grepl("bar",class(p$layers[[1]]$geom)))) {plotfilename<-"satellite_burials_reported_deaths_weekly_barplot"} else {
+  plotfilename<-"satellite_burials_reported_deaths_weekly" }
+ggsave(paste0("simul_output/somalia/",plotfilename,".png"),units="cm",height=18,width=30)
 
 # Rt estimate: https://epiforecasts.io/covid/posts/national/somalia/
 
@@ -185,7 +189,8 @@ covidm_simul=fcn_covidm_process_output(run$dynamics,filter_vars=c("E","foi","cas
       populval=mogadishu_popul,params)
 # PLOT
 # df for seeding
-seeding_df=data.frame(seed_date=unique(covidm_simul$date)[unique(params$pop[[1]]$seed_times)]) %>% summarise(min=min(seed_date),max=max(seed_date))
+seeding_df=data.frame(seed_date=unique(covidm_simul$date)[unique(params$pop[[1]]$seed_times)]) %>% 
+  summarise(min=min(seed_date),max=max(seed_date))
 # make the plot
 ggplot(subset(covidm_simul,!dynam_type %in% "preval")) + geom_area(aes(x=date,y=value,fill=compartment),color="black",size=0.3) +
   facet_wrap(dynam_type~compartm_type,scales="free") + theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5)) +
@@ -240,7 +245,7 @@ pf <- function(parameters, x){x=as.list(x); n_groups=length(parameters$pop[[1]]$
       if (k==length(npi_vals)) {parameters$pop[[1]]$schedule=NULL; parameters=cm_iv_apply(parameters,iv)} }
     return (parameters) }
 # priors
-priors=list(R0_fit="N 3 1 T 1 5", introd_date="N 50 10 T 10 90",seed_size="U 1 5",ifr_logit_intercept="U -12 -6",compliance="U 0 1")
+priors=list(R0_fit="N 3 1 T 1 5", introd_date="N 90 30 T 10 120",seed_size="U 1 5",ifr_logit_intercept="U -12 -6",compliance="U 0 1")
 # define likelihood function
 likelihood = function(parameters, dynamics, data, x){
   inc = data; inc[, t := as.numeric(date - ymd(parameters$date0))]
@@ -259,11 +264,14 @@ fit=cm_fit(base_parameters=params, priors=priors, parameters_func=pf, likelihood
 
 ### ### ### ### ### ### ### ### ### ###
 # load RDS file with several fits (different CDR values)
-mcmc_filename="simul_output/somalia/fits_death_scaling.rds"; fits_death_scaling <- readRDS(mcmc_filename)
-foldertag=gsub("mcmc_","",paste0(paste0(names(fits_death_scaling[[1]]$options[c("mcmc_burn_in","mcmc_samples")]),
-       as.numeric(fits_death_scaling[[1]]$options[c("mcmc_burn_in","mcmc_samples")]),collapse = "_"),"_fittingwindow_",
-  paste0(c(min(fits_death_scaling[[1]]$data$date),max(fits_death_scaling[[1]]$data$date)),collapse = "_")))
-mcmc_foldername=paste0("simul_output/somalia/fit_",foldertag); dir.create(mcmc_foldername); file.copy(mcmc_filename,mcmc_foldername)
+mcmc_filename="simul_output/somalia/fits_death2020-02-23_2020-10-01_seedsize_U_1_100.rds" 
+fits_death_scaling <- readRDS(mcmc_filename)
+foldertag=gsub("mcmc_","",
+            paste0(paste0(paste0(c(min(fits_death_scaling[[1]]$data$date),max(fits_death_scaling[[1]]$data$date)),collapse="_"),"_"),
+                                 paste0("seedsize_",gsub(" ","_",fits_death_scaling[[1]]$priors$seed_size),"_"),
+                                 paste0(names(fits_death_scaling[[1]]$options[c("mcmc_burn_in","mcmc_samples")]),
+         as.numeric(fits_death_scaling[[1]]$options[c("mcmc_burn_in","mcmc_samples")]),collapse = "_") ) )
+mcmc_foldername=paste0("simul_output/somalia/fit_",foldertag); if (!dir.exists(mcmc_foldername)) {dir.create(mcmc_foldername); file.copy(mcmc_filename,mcmc_foldername)}
 # CDR_vals=c(baseline_daily_burials*1e4/mogadishu_popul,0.1,0.2,0.4); slope_val=linregr$coefficients["agegroup_mean"]
 # fitting_date_window
 for (k in 1:length(CDR_vals)) {
@@ -273,15 +281,9 @@ for (k in 1:length(CDR_vals)) {
     `IFR all infections (%)`=1e2*sapply(ifr_logit_intercept,function(x) 
       sum(inv.logit(x+slope_val*somalia_agegroups_IFR$agegroup_mean)*somalia_agegroups_IFR$agegroup_perc*params$pop[[1]]$y))) %>%
     mutate(CDR=round(CDR_vals[k],3))
-  if (k==1){df_posteriors_comb=df_posteriors} else {df_posteriors_comb = rbind(df_posteriors_comb,df_posteriors)} }
+  if (k==1){df_posteriors_comb=df_posteriors} else {df_posteriors_comb=rbind(df_posteriors_comb,df_posteriors)} }
 
-# extract prior
-# cm_evaluate_distribution(fits_death_scaling[[1]]$priors$R0_fit)
-# cm_evaluate_distribution(fits_death_scaling[[1]]$priors$seed_size)
-# # mean of prior
-# sum(cm_evaluate_distribution(fits_death_scaling[[1]]$priors$seed_size)$x*
-#       cm_evaluate_distribution(fits_death_scaling[[1]]$priors$seed_size)$p)/sum(
-#         cm_evaluate_distribution(fits_death_scaling[[1]]$priors$seed_size)$p)
+# extract prior # cm_evaluate_distribution(fits_death_scaling[[1]]$priors$R0_fit)
 
 # calculate mean, median, CIs
 posterior_CI95 = df_posteriors_comb %>% mutate(n=row_number()) %>% pivot_longer(!c(n,CDR,chain,trial,lp)) %>% 
@@ -297,14 +299,13 @@ ggplot(posterior_CI95 %>% filter(!name %in% c("ifr_logit_intercept","IFR sympt. 
   geom_linerange(aes(ymin=ci50_low,ymax=ci50_up),position=position_dodge2(width=0.25),alpha=0.5,size=3) +
   geom_point(aes(y=median),pch="-",size=10,color="black") + facet_wrap(~name,scales="free") + theme_bw() + standard_theme + xlab("") + 
   ylab("mean (CI50, CI95)") + theme(axis.text.x=element_blank(),axis.ticks.x=element_blank()) + labs(color="CDR",
-  caption=paste0("Burn-in: ",fits_death_scaling[[1]]$options$mcmc_burn_in,", Iterations: ",fits_death_scaling[[1]]$options$mcmc_iter," (MCMC)")) +
-  geom_text(aes(x=factor(CDR),y=median,label=round(median,2)),nudge_x=0.3,color="black",size=3.5)
+  caption=paste0("Burn-in: ",fits_death_scaling[[1]]$options$mcmc_burn_in,", Samples: ",fits_death_scaling[[1]]$options$mcmc_samples," (MCMC)")) +
+  geom_text(aes(x=factor(CDR),y=median,label=round(median,2)),nudge_x=0.35,color="black",size=3.5)
 # SAVE
 ggsave(paste0(mcmc_foldername,"/posteriors_mean_CIs_CDRscan.png"),width=30,height=18,units="cm")
 
 # plot IFR estimates
-i_col=3:6 
-ifr_estimates = bind_rows(lapply(1:length(CDR_vals), function(k) cbind(somalia_agegroups_IFR %>% 
+i_col=3:6; ifr_estimates = bind_rows(lapply(1:length(CDR_vals), function(k) cbind(somalia_agegroups_IFR %>% 
   select(agegroup_mean),CDR=round(CDR_vals[k],3),
   sapply(as.numeric(array(subset(posterior_CI95,name %in% "ifr_logit_intercept" & CDR==round(CDR_vals[k],3))[,i_col])), function(x) 
  inv.logit(x+linregr$coefficients["agegroup_mean"]*somalia_agegroups_IFR$agegroup_mean)*params$pop[[1]]$y)))) %>% mutate(datatype="fit")
@@ -312,28 +313,54 @@ colnames(ifr_estimates)[i_col] <- colnames(posterior_CI95)[i_col]
 ifr_estimates=bind_rows(ifr_estimates,somalia_agegroups_IFR %>% select(agegroup_mean,ifr_mean) %>% 
         mutate(ifr_mean=ifr_mean*params$pop[[1]]$y) %>% rename(median=ifr_mean) %>% 
           mutate(datatype="estimate from data" ) ) %>% mutate(CDR=ifelse(is.na(CDR),"estimate from literature",CDR))
-# plot
+# plot age~IFR curves
 ggplot(ifr_estimates,aes(x=agegroup_mean)) + 
   geom_line(aes(y=median*1e2,group=CDR,color=factor(CDR),linetype=factor(datatype)),size=1.05) + 
   geom_point(aes(y=median*1e2,group=CDR,color=factor(CDR),linetype=factor(datatype)),size=2) + labs(color="CDR",linetype="",fill="CDR") +
   geom_ribbon(aes(ymin=ci95_low*1e2,ymax=ci95_up*1e2,group=CDR,fill=factor(CDR)),alpha=0.2) + theme_bw() + standard_theme + 
   scale_x_continuous(breaks=2.5+(0:16)*5) + theme(axis.text.x=element_text(vjust=0.5,size=12),axis.text.y=element_text(size=12)) + 
   scale_y_log10(breaks=scales::trans_breaks("log10",function(x) 10^x,n=12),labels=scales::trans_format("log10",scales::math_format(10^.x))) +
+  labs(caption=paste0("Burn-in: ",fits_death_scaling[[1]]$options$mcmc_burn_in,", Samples: ",fits_death_scaling[[1]]$options$mcmc_samples," (MCMC)")) +
   xlab("median age per age group (year)") + ylab("IFR %")
 # SAVE
 ggsave(paste0(mcmc_foldername,"/ifr_mcmc_estimates_CDRscan.png"),width=20,height=12,units="cm")
 
-# plot traces from MCMC
+### plot traces from MCMC ----------------
 ggplot(df_posteriors_comb %>% select(!`IFR sympt. infections (%)`,`IFR all infections (%)`,CDR) %>% 
          pivot_longer(!c(chain,trial,lp,CDR))) + geom_line(aes(x=trial,y=value,group=chain,color=factor(chain))) + 
   facet_grid(name~CDR,scales="free",labeller=labeller(CDR=label_both)) + theme_bw() + standard_theme + labs(color="chains")
 # SAVE
 ggsave(paste0(mcmc_foldername,"/MCMC_convergence.png"),width=30,height=20,units="cm")
 
-### plot PRIORS + posteriors
+### correlations between parameters ----------------
+# scatterplots + corrs for all values of CDR
+ggpairs(df_posteriors_comb %>% select(all_of(fitting_params),CDR) %>% mutate(CDR=factor(CDR)),aes(color=CDR,alpha=0.4)) +
+  theme_bw() + standard_theme
+# SAVE
+ggsave(paste0(mcmc_foldername,"/param_corrs_CDRall_values.png"),width=30,height=24,units="cm")
+# for 1 value of CDR
+# ggpairs(df_posteriors_comb %>% filter(CDR==unique(CDR)[1]) %>% select(all_of(fitting_params)),aes(alpha=0.4)) +
+#   theme_bw() + standard_theme # + theme(strip.text.x = element_text(size=9))
+# ggsave(paste0(mcmc_foldername,"/param_corrs_CDR",round(unique(CDR_vals)[1],3),".png"),width=30,height=24,units="cm")
+# corrs only
+pairwise_corrs = bind_rows(lapply(unique(df_posteriors_comb$CDR), function(x) cbind(df_posteriors_comb %>% filter(CDR==x) %>%
+   select(all_of(fitting_params)) %>% corrr::correlate() %>% corrr::shave() %>% corrr::stretch() ,CDR=x))) %>% # 
+  mutate(x=factor(x,levels=unique(x)),y=factor(y,levels=unique(y)),highlight_color=ifelse(abs(r)<0.7|is.na(r),0,1)) # %>% filter(!is.na(r))
+# plot
+ggplot(pairwise_corrs,aes(x,y,fill=r)) + geom_tile(aes(color=factor(highlight_color)),size=2,width=0.96,height=0.96) + 
+  facet_wrap(~CDR,labeller=labeller(CDR=label_both)) + geom_text(aes(label=round(r,2)),size=5) + 
+  scale_x_discrete(expand=c(0,0.02)) + scale_y_discrete(expand=c(0,0.02)) +
+  scale_fill_gradient2(low="blue",mid="white",high="red",limit=c(-1,1)) + scale_color_manual(values=c(NA,"black"),guide=FALSE) +
+  standard_theme + theme_bw() + theme(panel.grid.major=element_blank(),panel.grid.minor=element_blank()) +xlab("") + ylab("")
+# SAVE
+ggsave(paste0(mcmc_foldername,"/param_corrs_CDR.png"),width=30,height=24,units="cm")
+
+### plot PRIORS + posteriors ----------------
 for (k in 1:length(unique(df_posteriors_comb$CDR))) {
   cm_plot_posterior_mod(fits_death_scaling[[k]],plot_params = list(n_bin=50,line_width=0.7,cdr_val=CDR_vals[k]))
   ggsave(paste0(mcmc_foldername,"/priors_posteriors_CDR_",round(CDR_vals[k],3),".png"),width=30,height=20,units="cm") }
+# pairwise
+cm_plot_pairwise_mod(fits_death_scaling[[k]],standard_theme)
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 # use posterior to generate sample dynamics from the model
@@ -346,6 +373,7 @@ summ = dyn_all %>% filter(compartment %in% c("S","death_o")) %>% group_by(t,run,
          compartment=ifelse(compartment %in% "S","attack_rate",as.character(compartment))) %>% group_by(t,compartment,CDR) %>% 
   summarise(lower=hdi(value)[[1]],upper=hdi(value)[[2]],mean=mean(value) ) %>% 
   mutate(date=as.Date(seq(as.Date(params$date0),as.Date(params$date0)+max(t),1)[t+1]),CDR=round(CDR,5))
+write_csv(summ,paste0(mcmc_foldername,"/summ.csv"))
 
 # fitting data (deaths incidence)
 # CDR_vals=c(0.0422654,0.1,0.2,0.4) # scale_factor=(mogadishu_popul*CDR_vals[k]/1e4)/baseline_daily_burials
@@ -355,21 +383,23 @@ fitting_incidence_modelcompare = bind_rows(lapply((mogadishu_popul*CDR_vals/1e4)
   date_within_fitting_t=ifelse(date>=min(fits_death_scaling[[1]]$data$date)&date<=max(fits_death_scaling[[1]]$data$date),TRUE,FALSE)) %>%
            rename(new_deaths=daily_baseline_subtr)) ))
 # calculate likelihood, deviance, DIC
-logllk_values <- right_join(summ %>% filter(compartment=="death_o") %>% select(!c(lower,upper)),
-                            subset(fitting_incidence_modelcompare, date_within_fitting_t) %>% select(!date_within_fitting_t),by=c("CDR","date")) %>% 
-  mutate(logllk=dpois(new_deaths,lambda=mean,log=T)) %>% group_by(CDR) %>% 
-  summarise(sum_logllk=sum(logllk),deviance=-2*sum_logllk,d_p=var(-2*logllk)/2,DIC=deviance+d_p)
+DIC_logllk_values <- left_join(right_join(summ %>% filter(compartment=="death_o") %>% select(!c(lower,upper)),
+            subset(fitting_incidence_modelcompare, date_within_fitting_t) %>% select(!date_within_fitting_t),by=c("CDR","date")) %>% 
+                                 mutate(logllk=dpois(new_deaths,lambda=mean,log=T)) %>% group_by(CDR) %>% 
+                                 summarise(sum_logllk=sum(logllk),deviance=-2*sum_logllk,d_p=var(-2*logllk)/2,DIC=deviance+d_p),
+                               fitting_incidence_modelcompare %>% group_by(CDR) %>% summarise(maxval=max(new_deaths)),by="CDR")
 # sum(dpois(eval$new_deaths, lambda = pmax(0.1, eval$model_case), log = T))
 
 # show model fit
+fitting_dates=fits_death_scaling[[1]]$data %>% summarise(min_date=min(date),max_date=max(date))
 ggplot(summ %>% filter(compartment=="death_o")) + 
  geom_line(aes(x=date,y=mean), colour="blue") + geom_ribbon(aes(x=date,ymin=lower,ymax=upper), fill="blue",alpha=0.2) + 
  geom_line(data=fitting_incidence_modelcompare %>% mutate(t=as.numeric(date)),aes(x=date,y=new_deaths),linetype="dashed",size=0.3) +
  geom_point(data=fitting_incidence_modelcompare %>% mutate(t=as.numeric(date)),aes(x=date,y=new_deaths),fill=NA,shape=1) +
  facet_wrap(~CDR,scales="free",labeller=labeller(CDR=label_both)) + 
-  geom_rect(data=fits_death_scaling[[1]]$data %>% summarise(min_date=min(date),max_date=max(date)),
-            aes(xmin=min_date,xmax=max_date,ymin=-Inf,ymax=Inf),fill="pink",alpha=0.2,linetype="dashed",color="red") + 
-  xlab("") + ylab("deaths (daily)") + standard_theme + theme_bw() + theme(axis.text.x=element_text(vjust=0.5,angle=90)) + 
+ geom_rect(data=fitting_dates,aes(xmin=min_date,xmax=max_date,ymin=-Inf,ymax=Inf),fill="pink",alpha=0.2,linetype="dashed",color="red") + 
+ xlab("") + ylab("deaths (daily)") + standard_theme + theme_bw() + theme(axis.text.x=element_text(vjust=0.5,angle=90)) + 
+ geom_text(data=DIC_logllk_values,aes(x=fitting_dates$min_date+20,y=0.9*maxval,label=paste0("DIC=",round(DIC))),color="black",size=3.5) +
  scale_x_date(date_breaks="week",limits=as.Date(c("2020-01-01","2020-10-15")),expand=expansion(0.0)) + 
  scale_y_continuous(breaks=(0:20)*10,expand=expansion(0,0))
 # save
@@ -395,7 +425,9 @@ somalia_acled_fatalities <- somalia_acled_data %>% group_by(event_date,admin1) %
   summarise(date=unique(dmy(event_date)),fatalities=sum(fatalities),year=unique(year)) %>% ungroup() %>% group_by(admin1) %>% 
   complete(date=seq.Date(min(date),max(date),by="day")) %>% mutate(fatalities_missing_as_0=ifelse(is.na(fatalities),0,fatalities),
   rollingmean=roll_mean(fatalities_missing_as_0,7,align="center",fill=NA,na.rm=T),
-  rollingsum=roll_sum(fatalities_missing_as_0,7,fill=NA,align="right")) %>% mutate(year=year(date),month=month(date),week=week(date))
+  rollingsum=roll_sum(fatalities_missing_as_0,7,fill=NA,align="right"),
+  rollingsum_month_acled=roll_sum(fatalities_missing_as_0,30,fill=NA,align="right")) %>%
+  mutate(year=year(date),month=month(date),week=week(date))
 # fitting_date_window=as.Date(c("2020-01-15","2020-10-01"))
 p<-ggplot(subset(somalia_acled_fatalities, admin1=="Banadir" & date>=as.Date("2019-01-01") & date<=as.Date("2021-01-01"))) + # 
   geom_bar(aes(x=date,y=fatalities),stat="identity") + geom_line(aes(x=date,y=rollingmean)) + # facet_wrap(~admin1,scales="free") + 
@@ -420,27 +452,41 @@ ggplot(subset(acled_monthly_fatalities,date<=as.Date("2020-11-01") & date>as.Dat
 ggsave("simul_output/somalia/acled_somalia_monthly_fatalities.png",width=30,height=18,units="cm")
 
 # compare to burials
-acled_burial_comparison = left_join(subset(somalia_acled_fatalities,admin1=="Banadir") %>% 
-                    select(admin1,date,fatalities_missing_as_0,rollingmean) %>% rename(fatalities=fatalities_missing_as_0), 
-  burial_data[!rowSums(is.na(burial_data))==(ncol(burial_data)-1),
-  !colSums(is.na(burial_data))==nrow(burial_data)] %>% select(date,new_graves_best_ipol),by="date") 
+acled_burial_comparison = left_join(subset(somalia_acled_fatalities,admin1=="Banadir") %>%
+                    select(admin1,date,fatalities_missing_as_0,rollingmean,rollingsum,rollingsum_month_acled) %>% 
+                    rename(fatalities=fatalities_missing_as_0,rollingmean_acled=rollingmean,rolling_week_sum_acled=rollingsum),
+  burial_data[!rowSums(is.na(burial_data))==(ncol(burial_data)-1),!colSums(is.na(burial_data))==nrow(burial_data)] %>% 
+  select(date,new_graves_best_ipol) %>% mutate(rolling_week_sum_burials=roll_sum(new_graves_best_ipol,7,fill=NA,align="right"),
+  rolling_month_sum_burials=roll_sum(new_graves_best_ipol,30,fill=NA,align="right")),   by="date") 
+
+# ggplot rolling sums
+ggplot(acled_burial_comparison %>% ungroup() %>% select(date,rollingsum_month_acled,rolling_month_sum_burials) %>% pivot_longer(!date),
+       aes(date)) + geom_line(aes(x=date,y=value,group=name,color=name)) + theme_bw() + standard_theme + theme(legend.position="top") + 
+  labs(color="") + scale_x_date(limits=as.Date(c("2019-01-01","2020-09-25")),date_breaks="2 weeks",expand=expansion(0.01,0)) + 
+  scale_y_continuous(expand=expansion(0.01,0))
+ggsave("simul_output/somalia/acled_burials_rolling_monthly_sum.png",width=30,height=18,units="cm")
 
 # weekly monthly compare
 weekly_acled_burial_comparison = acled_burial_comparison %>% mutate(week=week(date),year=year(date)) %>% group_by(year,week) %>% 
-  summarise(date=min(date),fatalities=sum(fatalities),rollingmean=sum(rollingmean),new_graves_best_ipol=sum(new_graves_best_ipol)) %>%
-  mutate(year_week=factor(paste0(year,"/",week),levels = unique(paste0(year,"/",week))))
+  summarise(date=min(date),fatalities=sum(fatalities),rollingmean_acled=sum(rollingmean_acled),new_graves_best_ipol=sum(new_graves_best_ipol)) %>%
+  mutate(year_week=factor(paste0(year,"/",week),levels=unique(paste0(year,"/",week)))) %>% 
+  mutate(year_week_merged=ifelse(week>=52,paste0(year,"/52_53"),as.character(year_week))) %>% 
+  mutate(year_week_merged=factor(year_week_merged,levels=unique(year_week_merged))) %>% group_by(year_week_merged) %>% 
+  summarise(year=unique(year),date=max(date),fatalities=sum(fatalities),new_graves_best_ipol=sum(new_graves_best_ipol))
 # WEEKLY compare plot
-ggplot(subset(weekly_acled_burial_comparison,date>=as.Date("2019-01-01") & date<=as.Date("2020-10-01")) %>% 
-         select(!rollingmean) %>% pivot_longer(!c(date,year,date,week,year_week))) + #
-  geom_bar(aes(x=year_week,y=value,group=name,fill=name),stat="identity",position=position_dodge(width=0.75),size=0.2) +
-  scale_fill_discrete(labels=c("deaths due to political violence (ACLED)","burials")) +
-  # geom_point(aes(x=year_week,y=value,group=name,color=name),pch="-",size=12) + 
-  # geom_vline(xintercept=(1:length(unique(weekly_acled_burial_comparison$year_week)))-0.5,size=0.1,linetype="dashed") +
-  # scale_color_discrete(labels=c("deaths due to political violence (ACLED)","burials")) +
-  theme_bw() + standard_theme + theme(axis.text.x = element_text(vjust=0.5),legend.position="bottom") + labs(fill="",color="") +
-  scale_y_continuous(expand=expansion(0.01,0),breaks=(0:20)*10) + xlab("year/week") + ylab("number/week")
+p<-ggplot(subset(weekly_acled_burial_comparison,date>=as.Date("2019-01-01") & date<=as.Date("2020-10-01")) %>% pivot_longer(!c(date,year,year_week_merged))) +
+#    geom_bar(aes(x=year_week_merged,y=value,group=name,fill=name),stat="identity",position=position_dodge(width=0.75),size=0.2) +
+#  scale_fill_discrete(labels=c("deaths due to political violence (ACLED)","burials")) +
+   geom_point(aes(x=year_week_merged,y=value,group=name,color=name),pch="-",size=12) + 
+   geom_vline(xintercept=(1:length(unique(weekly_acled_burial_comparison$year_week_merged)))-0.5,size=0.1,linetype="dashed") +
+   scale_color_discrete(labels=c("deaths due to political violence (ACLED)","burials")) +
+   theme_bw() + standard_theme + theme(axis.text.x = element_text(vjust=0.5),legend.position="bottom") + labs(fill="",color="") +
+   scale_y_continuous(expand=expansion(0.01,0),breaks=(0:20)*10) + xlab("year/week") + ylab("number/week"); p
 # SAVE
-ggsave("simul_output/somalia/ACLED_data/acled_banadir_burials_comparison_WEEKLY.png",width=30,height=16,units="cm")
+# 
+if (any(grepl("Point",class(p$layers[[1]]$geom)))) {plotfilename<-"acled_banadir_burials_comparison_WEEKLY_geompoint"} else {
+  plotfilename<-"acled_banadir_burials_comparison_WEEKLY" }
+ggsave(paste0("simul_output/somalia/ACLED_data/",plotfilename,".png"),width=30,height=16,units="cm")
 
 # daily compare plot
 ggplot(acled_burial_comparison %>% pivot_longer(!c(admin1,date)) %>% filter(date<=as.Date("2020-10-01")),aes(x=date)) + # geom_line() +

@@ -116,6 +116,51 @@ cm_plot_posterior_mod <- function(fit,plot_params)
     theme(legend.position = "none", strip.background = element_blank()) + theme_bw() + standard_theme
 }
 
+### cm plot pairwise -----------------
+cm_plot_pairwise_mod <- function(fit, plot_theme)
+{  if (!any("cm.fit" %in% class(fit))) {     stop("cm_plot_pairwise requires a cm.fit object.");   }
+  
+  # get prior distributions
+  priors = NULL;
+  for (pr in 1:length(fit$priors)) {
+    ep = cm_evaluate_distribution(fit$priors[[pr]]);
+    setDT(ep);
+    ep[, p := p / max(p)]
+    ep[, parameter := names(fit$priors)[pr]];
+    priors = rbind(priors, ep);
+  }
+  posterior = melt(fit$posterior, id.vars = NULL, measure.vars = 5:ncol(fit$posterior), variable.name = "parameter");
+  
+  # put in correct order
+  priors[, parameter := factor(parameter, levels = names(fit$priors))];
+  posterior[, parameter := factor(parameter, levels = names(fit$priors))];
+  
+  # assemble plots
+  plotlist = list();
+  i = 1;
+  for (r in 1:length(fit$priors)) {
+    for (c in 1:r) {
+      rp = names(fit$priors)[r];
+      cp = names(fit$priors)[c];
+      if (r == c) { # posterior element on its own
+        plot = ggplot() +
+          geom_line(data = priors[parameter == rp], aes(x = x, y = p), linetype = "22") + # colour = "grey", , size = 0.25
+          geom_histogram(data = posterior[parameter == rp], aes(value, y = stat(ndensity)), fill = "#88bbff", bins = 30) +
+          labs(x = NULL, y = NULL, title = rp) + theme_bw() + plot_theme
+      } else { # pairwise plot
+        data = cbind(posterior[parameter == cp, .(x = value)], posterior[parameter == rp, .(y = value)]);
+    plot = ggplot(data) + geom_density2d(aes(x, y), colour = "#ffbb88") +   labs(x = NULL, y = NULL) + theme_bw() + plot_theme}
+      plotlist[[i]] = plot;
+      i = i + 1;
+    }
+    for (c in seq_len(length(fit$priors) - r) + r) {
+      plotlist[[i]] = NULL;
+      i = i + 1;     }
+    cat("\n");
+  }
+  plot_grid(plotlist = plotlist, nrow = length(fit$priors), ncol = length(fit$priors))
+}
+
 ### generate matrices to scale force of infection terms ---------
 fun_force_inf_vects=function(vartype_list,forceinf_vars,n_age,f_val,N_tot){
 b_m_full=matrix(0,length(vartype_list)*n_age,n_age)

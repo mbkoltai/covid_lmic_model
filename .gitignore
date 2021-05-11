@@ -17,3 +17,5 @@ data/
 manuscripts/
 simul_output/
 ifr_estimates/
+covid_LIC_fcns.R
+covid_LIC_model.R

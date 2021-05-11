@@ -94,12 +94,15 @@ fcn_covidm_process_output <- function(run_dynamics,filter_vars,compartm_types_va
 ### plot single simul and calc error -----------------
 fcn_covidm_singlesim_error <- function(covidmsimul,intr_date,seedsize,df_data,fitting_dates){
   df_data_simul_deaths=left_join(subset(covidmsimul %>% rename(simul=value),compartment %in% "death_o")%>% select(date,simul),
-                                 df_data %>% select(date,daily_baseline_subtr) %>% rename(data=daily_baseline_subtr)) %>% pivot_longer(!date)
-  abs_err=subset(df_data_simul_deaths, date >= fitting_dates[1] & date <= fitting_dates[2]) %>% group_by(date) %>%
-    summarise(data=value[name=="data"],diff=value[name=="data"]-value[name=="simul"],sumval=sum(value),mae=abs(diff))
-  ggplot(df_data_simul_deaths,aes(x=date)) + geom_line(aes(y=value,group=name,color=name)) + theme_bw() + standard_theme + 
+            df_data %>% select(date,daily_baseline_subtr) %>% rename(data=daily_baseline_subtr)) # %>% pivot_longer(!date)
+  abs_err=subset(df_data_simul_deaths, date >= fitting_dates[1] & date <= fitting_dates[2]) %>% # group_by(date) %>%
+    summarise(mae=mean(abs(data-simul)),mape=mean(abs(data[data!=0]-simul[data!=0])/data[data!=0])) # data=value[name=="data"],
+  # PLOT
+  ggplot(df_data_simul_deaths,aes(x=date)) + geom_line(aes(y=simul),color="blue") + #,group=name,color=name
+    geom_line(aes(y=data),linetype="dashed",size=0.2) + geom_point(aes(y=data),fill=NA,shape=1) + # ,group=name,color=name
+    theme_bw() + standard_theme + ylab("deaths/day") + 
     ggtitle(paste0("MAE=",round(mean(abs_err$mae),2), ", introd date: ", intr_date, ", seedsize=", sum(seedsize))) + 
-    scale_x_date(limits = fitting_dates,date_breaks="2 weeks",expand=expansion(0.01,0)) + scale_y_continuous(expand=expansion(0.01,0))
+    scale_x_date(limits=fitting_dates,date_breaks="2 weeks",expand=expansion(0.01,0)) + scale_y_continuous(expand=expansion(0.01,0))
 }
 
 ### function to have COVIDM incidence outputs ---------------------------------

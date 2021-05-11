@@ -45,7 +45,7 @@ ggplot(subset(covid_somal,!type %in% "recovered"),aes(x=date)) +
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### SATELLITE DATA on cemeteries ----------------
 #' satellite image data
-burial_data=read_csv("data/somalia/Mogadishu_data/mogadishu_burial_analysis-main/out_bdr_daily_estimates.csv")
+burial_data=read_csv("data/somalia_data//Mogadishu_data/mogadishu_burial_analysis-main/out_bdr_daily_estimates.csv")
 # pop_wp2015,pop_wp2020,new_graves_best_ipol,
 ggplot(burial_data %>% select(date,br_wp2015,br_wp2015_base_s,br_wp2020,br_wp2020_base_s) %>% pivot_longer(!date)) + 
   geom_line(aes(x=date,y=value,group=name,color=name)) + # facet_wrap(~name,scales="free") + 
@@ -117,6 +117,7 @@ ggplot(OxCGRT_input) + geom_line(aes(x=date,y=OxCGRT_scaled)) +
   scale_x_date(limits=c(min(subset(OxCGRT_input,NPI_on>0)$date)-15,max(out_bdr_daily_estimates$date)+35),breaks="week",
                expand=expansion(0.01,0)) + scale_y_continuous(breaks=(0:10)/10) + 
   geom_vline(data=npi_df,aes(xintercept=on,color=name),linetype="dashed") + ylab("level of contacts if reduction ~ StringencyIndex")
+# SAVE
 # ggsave(paste0("simul_output/somalia/OxCGRT_input.png"),width=30,height=18,units="cm")
 
 ### Somalia population, IFR ------------

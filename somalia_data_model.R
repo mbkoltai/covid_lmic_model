@@ -13,7 +13,7 @@
 #' Load libraries, functions
 rm(list=ls()); currentdir_path=dirname(rstudioapi::getSourceEditorContext()$path); setwd(currentdir_path)
 lapply(c("tidyverse","deSolve","qs","gtools","rstudioapi","wpp2019","countrycode","coronavirus","wesanderson","dttr2","RcppRoll",
-         "scales","wpp2019","GGally","corrr"), library,character.only=TRUE)
+         "scales","wpp2019","GGally","corrr","ungeviz"), library,character.only=TRUE)
 # detach("package:fitdistrplus", unload = TRUE); detach("package:MASS", unload = TRUE) # "foreach","parallel","doParallel"
 # functions and plotting theme
 source("somalia_data_model_fcns.R")
@@ -82,17 +82,16 @@ df_compare_report_satell=bind_rows(weekly_deaths_reported,
   summarise(date=min(date),datasource=unique(datasource),name=unique(name),value=sum(value)) %>% mutate(week=gsub("/","/w",week))
 # plot # library(ungeviz)
 p <- ggplot(subset(df_compare_report_satell,date>"2020-01-15" & date<"2020-10-07"),aes(x=week,y=value,group=datasource)) + 
-  # geom_point(aes(x=week,y=value,group=datasource,color=datasource),pch="-",size=30) + 
-  geom_hpline(aes(x=week,y=value,group=datasource,color=datasource),width=0.9) + # 
-  geom_vline(xintercept=(1:length(unique(df_compare_report_satell$week)))-0.5,size=0.1,linetype="dashed") +
-  scale_color_discrete(labels=c("reported COVID19 deaths","excess burials")) +  labs(fill="",color="") +
-# geom_bar(aes(fill=datasource),stat="identity",position=position_dodge(width=0.75),color="black",size=0.2) + 
-# scale_fill_discrete(labels=c("reported COVID19 deaths","excess burials")) + 
-  theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5),legend.position=c(0.88,0.9),legend.margin=margin(0,0,0,0)) +
-  # legend.spacing.x = unit(0, "mm"),legend.spacing.y = unit(0, "mm")
-  scale_y_continuous(expand=expansion(0.01,0),breaks=(0:20)*5); p
+  # geom_hpline(aes(x=week,y=value,group=datasource,color=datasource),width=0.9) + # 
+  # geom_vline(xintercept=(1:length(unique(df_compare_report_satell$week)))-0.5,size=0.1,linetype="dashed") + 
+  geom_bar(aes(fill=datasource),stat="identity",position=position_dodge(width=0.75),color="black",size=0.2) + 
+  scale_fill_discrete(labels=c("reported COVID19 deaths","excess burials")) + 
+  scale_color_discrete(labels=c("reported COVID19 deaths","excess burials"))+labs(fill="",color="") + theme_bw() + standard_theme +
+  theme(axis.text.x=element_text(vjust=0.5),legend.position=c(0.8,0.9),legend.margin=margin(0,0,0,0),legend.text=element_text(size=14))+
+  scale_y_continuous(expand=expansion(0.01,0),breaks=(0:20)*5) + xlab("year/week") + ylab("number per week"); p
+# legend.spacing.x = unit(0, "mm"),legend.spacing.y = unit(0, "mm")
 # SAVE
-if (any(grepl("bar",class(p$layers[[1]]$geom)))) {plotfilename<-"satellite_burials_reported_deaths_weekly_barplot"} else {
+if (any(grepl("Bar",class(p$layers[[1]]$geom)))) {plotfilename<-"satellite_burials_reported_deaths_weekly_barplot"} else {
   plotfilename<-"satellite_burials_reported_deaths_weekly" }
 ggsave(paste0("simul_output/somalia/",plotfilename,".png"),units="cm",height=18,width=30)
 
@@ -137,7 +136,7 @@ ggplot(data.frame(age=factor(somalia_agegroups_IFR$agegroup,levels=unique(somali
 cm_path="~/Desktop/research/models/epid_models/covid_model/lmic_model/covidm/"
 cm_force_rebuild=F; cm_build_verbose=T; cm_version=1; source(file.path(cm_path,"R","covidm.R"))
 countryval="Somalia"; params=cm_parameters_SEI3R(gsub("Sudan|Somalia","Ethiopia",countryval),
-                                                 date_start="2019-11-01",date_end="2020-11-01")
+                                                 date_start="2019-11-01",date_end="2020-10-01")
 # set population: Somalia --> Mogadishu
 params$pop[[1]]$name=countryval
 params$pop[[1]]$size=somalia_agegroups_IFR$agegroupsize*(mogadishu_popul/sum(somalia_agegroups_IFR$agegroupsize))
@@ -150,8 +149,15 @@ params$pop[[1]]$seed_times=rep(seeding_t_window[1]:seeding_t_window[2],each=seed
 # infections start in individuals aged 20-50, 1 introd in each age group
 params$pop[[1]]$dist_seed_ages=cm_age_coefficients(20,60,5*(0:length(params$pop[[1]]$size)))
 ### add death process to model ------
-params$processes <- list(cm_multinom_process("Ip",outcomes=data.table(death=somalia_agegroups_IFR$ifr_mean), 
+params$processes <- list(cm_multinom_process("Ip",outcomes=data.table(death=somalia_agegroups_IFR$ifr_mean/params$pop[[1]]$y),
                                              delays=data.table(death=cm_delay_gamma(22,22,60,1/4)$p), report="o"))
+# plot IFR for symptomatic vs all infections
+### ### 
+ggplot(somalia_agegroups_IFR %>% mutate(ifr_symptom=ifr_mean/params$pop[[1]]$y) %>% select(agegroup_mean,ifr_mean,ifr_symptom) %>%
+         pivot_longer(cols=!agegroup_mean)) + geom_line(aes(x=agegroup_mean,y=value*100,color=name)) + 
+  geom_point(aes(x=agegroup_mean,y=value*100,color=name)) + theme_bw() + standard_theme + 
+  scale_x_continuous(breaks=2.5+(0:16)*5) + scale_y_log10(breaks=10^(-5:2))
+
 # suscept and clinical fraction age dependent
 suscept_clinfract_posteriors<-read_csv("data/suscept_clinfract_posteriors_davies2010.csv") %>% 
   mutate(agegroup=factor(agegroup,levels=unique(agegroup)))
@@ -195,7 +201,7 @@ seeding_df=data.frame(seed_date=unique(covidm_simul$date)[unique(params$pop[[1]]
 # make the plot
 ggplot(subset(covidm_simul,!dynam_type %in% "preval")) + geom_area(aes(x=date,y=value,fill=compartment),color="black",size=0.3) +
   facet_wrap(dynam_type~compartm_type,scales="free") + theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5)) +
-  scale_x_date(limits=as.Date(c(params$date0,params$time1)),date_breaks="2 weeks",expand=expansion(0,0)) + ylab("number") + 
+  scale_x_date(limits=as.Date(c("2019-12-01",params$time1)),date_breaks="2 weeks",expand=expansion(0,0)) + ylab("number") + 
   scale_y_continuous(expand=expansion(0.01,0)) +geom_vline(data=npi_df,aes(xintercept=on,color=name),size=1,linetype="dashed") +
   geom_rect(data=seeding_df,aes(xmin=min,xmax=max,ymin=0,ymax=Inf),fill="pink",color=NA,alpha=0.4) + labs(fill="")
 # SAVE
@@ -205,25 +211,25 @@ ggplot(subset(covidm_simul,!dynam_type %in% "preval")) + geom_area(aes(x=date,y=
 # out_bdr_daily_estimates %>% select(date,new_graves_best_ipol,daily_baseline_subtr,rollmeanweek)
 fitting_date_window=as.Date(c("2020-01-15","2020-10-01"))
 fcn_covidm_singlesim_error(covidm_simul,introd_day,seedsize_per_day,out_bdr_daily_estimates,fitting_date_window)
-
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
-### MCMC --------------
-# define fitting parameters
+###
+# IFR
 # IFR: linear regression -> generate new values
 somalia_agegroups_IFR = somalia_agegroups_IFR %>% mutate(log_ifr=log(ifr_mean),logit_ifr=log(ifr_mean/(1-ifr_mean)))
 # ggplot(somalia_agegroups_IFR,aes(x=agegroup_mean)) + geom_line(aes(y=log_ifr)) + geom_point(aes(y=log_ifr)) + 
 #   geom_line(aes(y=logit_ifr),color="red") + geom_point(aes(y=logit_ifr),color="red")+ scale_x_continuous(breaks=2.5+(0:16)*5)
 linregr=lm(logit_ifr~agegroup_mean,data=somalia_agegroups_IFR %>% select(agegroup_mean,logit_ifr) )
 ggplot(somalia_agegroups_IFR %>% 
- mutate( #uk_estim=IFR_estimates_Sandmann2021$value_percent,
-  pred_ifr=inv.logit(linregr$coefficients["(Intercept)"] + linregr$coefficients["agegroup_mean"]*somalia_agegroups_IFR$agegroup_mean)) %>%
- select(agegroup_mean,ifr_mean,pred_ifr) %>% rename(estimate=ifr_mean,fit=pred_ifr) %>% pivot_longer(!c(agegroup_mean)),
- aes(x=agegroup_mean,y=value*1e2,group=name,color=name)) + geom_line(size=1.05) + geom_point(size=2) +
- theme_bw() + standard_theme + scale_x_continuous(breaks=2.5+(0:16)*5) + labs(color="") + xlab("age (year)") + ylab("IFR %") +
- theme(axis.text.x=element_text(vjust=0.5,size=12),axis.text.y=element_text(size=12)) +
- scale_y_log10(limits=c(1e-4,10^1.1),breaks=scales::trans_breaks("log10",function(x) 10^x))
+  mutate(pred_ifr=inv.logit(linregr$coefficients["(Intercept)"]+linregr$coefficients["agegroup_mean"]*somalia_agegroups_IFR$agegroup_mean)) %>%
+       select(agegroup_mean,ifr_mean,pred_ifr) %>% rename(estimate=ifr_mean,fit=pred_ifr) %>% pivot_longer(!c(agegroup_mean)),
+       aes(x=agegroup_mean,y=value*1e2,group=name,color=name)) + geom_line(size=1.05) + geom_point(size=2) +
+  theme_bw() + standard_theme + scale_x_continuous(breaks=2.5+(0:16)*5) + labs(color="") + xlab("age (year)") + ylab("IFR %") +
+  theme(axis.text.x=element_text(vjust=0.5,size=12),axis.text.y=element_text(size=12)) +
+  scale_y_log10(limits=c(1e-4,10^1.1),breaks=scales::trans_breaks("log10",function(x) 10^x))
 # ggsave("simul_output/somalia/IFR_consensus_estimate_fit.png",width=15,height=10,units="cm")
 # predicted IFR: exp(-10.8 + 0.1*c(2.5+(0:14)*5,80.255))
+
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### MCMC --------------
 ### ### ### ### ### ### ### ###
 # define parameters func, which interprets a proposal for the posterior distribution as a parameter set usable by the underlying model.
 fitting_params <- c("R0_fit","introd_date","seed_size","ifr_logit_intercept", "compliance")
@@ -234,9 +240,9 @@ pf <- function(parameters, x){x=as.list(x); n_groups=length(parameters$pop[[1]]$
     # seed size and introd date
     parameters$pop[[1]]$seed_times=rep(x$introd_date:x$introd_date,each=x$seed_size)
   # IFR
-  agegroupmeans=c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,62.5,67.5,72.5,80.255)
-  slope_val=as.numeric(linregr$coefficients["agegroup_mean"])
-  parameters$processes<-list(cm_multinom_process("Ip",outcomes=data.table(death=inv.logit(x$ifr_logit_intercept+slope_val*agegroupmeans)),
+  agegroupmeans=c(2.5+(0:14)*5,80.255); slope_val=as.numeric(linregr$coefficients["agegroup_mean"])
+  parameters$processes<-list(cm_multinom_process("Ip",
+                              outcomes=data.table(death=inv.logit(x$ifr_logit_intercept+slope_val*agegroupmeans)/parameters$pop[[1]]$y),
                                           delays=data.table(death=data.table(death=cm_delay_gamma(22,22,60,1/4)$p)),report="o"))
   # compliance
   t_npi=list(first=c("2020-03-19","2020-06-30"),second=c("2020-07-01","2020-08-29"),
@@ -300,7 +306,8 @@ ggplot(posterior_CI95 %>% filter(!name %in% c("ifr_logit_intercept","IFR sympt. 
   geom_linerange(aes(ymin=ci50_low,ymax=ci50_up),position=position_dodge2(width=0.25),alpha=0.5,size=3) +
   geom_point(aes(y=median),pch="-",size=10,color="black") + facet_wrap(~name,scales="free") + theme_bw() + standard_theme + xlab("") + 
   ylab("mean (CI50, CI95)") + theme(axis.text.x=element_blank(),axis.ticks.x=element_blank()) + labs(color="CDR",
-  caption=paste0("Burn-in: ",fits_death_scaling[[1]]$options$mcmc_burn_in,", Samples: ",fits_death_scaling[[1]]$options$mcmc_samples," (MCMC)")) +
+  caption=paste0("Burn-in: ",fits_death_scaling[[1]]$options$mcmc_burn_in,
+                 ", Samples: ",fits_death_scaling[[1]]$options$mcmc_samples," (MCMC)")) +
   geom_text(aes(x=factor(CDR),y=median,label=round(median,2)),nudge_x=0.35,color="black",size=3.5)
 # SAVE
 ggsave(paste0(mcmc_foldername,"/posteriors_mean_CIs_CDRscan.png"),width=30,height=18,units="cm")
@@ -406,7 +413,8 @@ ggplot(summ %>% filter(compartment=="death_o")) +
 # save
 ggsave(paste0(mcmc_foldername,"/dynamics_fit_deaths_CDR_scan.png"),width=30,height=16,units="cm")
 
-# attack rate plot
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+### attack rate plot
 p <- ggplot(summ %>% filter(compartment=="attack_rate")) + 
   geom_line(aes(x=date,y=mean,group=CDR,color=factor(CDR)),size=1.2) + facet_wrap(~CDR,nrow=length(CDR_vals),labeller=labeller(CDR=label_both)) +
   geom_ribbon(aes(x=date,ymin=lower,ymax=upper,group=CDR,fill=factor(CDR)),alpha=0.2) + labs(color="CDR",fill="CDR") + 
@@ -446,7 +454,8 @@ acled_monthly_fatalities=somalia_acled_fatalities %>% group_by(year,month,admin1
   summarise(year=unique(year),date=min(date),fatalities=sum(fatalities_missing_as_0)) %>% 
   mutate(year_month=ifelse(nchar(as.character(month))==1,paste0(year,"/0",month),paste0(year,"/",month))) %>%
   mutate(year_month=factor(year_month,levels=unique(year_month)))
-ggplot(subset(acled_monthly_fatalities,date<=as.Date("2020-11-01") & date>as.Date("2018-11-01")),aes(x=year_month,y=fatalities)) + geom_bar(stat="identity") + facet_wrap(~admin1,scales = "free") +
+ggplot(subset(acled_monthly_fatalities,date<=as.Date("2020-11-01") & date>as.Date("2018-11-01")),aes(x=year_month,y=fatalities)) + 
+  geom_bar(stat="identity") + facet_wrap(~admin1,scales = "free") +
   geom_rect(aes(xmin="2020/01",xmax="2020/10",ymin=0,ymax=Inf),fill="pink",color=NA,alpha=0.01) + ylab("deaths/month") + 
   theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5,size=6))
 # SAVE

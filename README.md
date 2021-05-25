@@ -4,8 +4,8 @@
 
 ### Contact
 
-Mihaly Koltai
-May 2021
+Mihaly Koltai  
+May 2021  
 [CMMID, LSHTM](https://www.lshtm.ac.uk/aboutus/people/koltai.mihaly)
 
 ### Summary

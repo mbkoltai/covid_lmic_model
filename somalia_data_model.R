@@ -46,7 +46,7 @@ ggplot(subset(covid_somal,!type %in% "recovered"),aes(x=date)) +
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### SATELLITE DATA on cemeteries ----------------
 #' satellite image data
-burial_data=read_csv("data/somalia_data//Mogadishu_data/mogadishu_burial_analysis-main/out_bdr_daily_estimates.csv")
+burial_data=read_csv("data/somalia_data/Mogadishu_data/mogadishu_burial_analysis-main/out_bdr_daily_estimates.csv")
 # pop_wp2015,pop_wp2020,new_graves_best_ipol,
 ggplot(burial_data %>% select(date,br_wp2015,br_wp2015_base_s,br_wp2020,br_wp2020_base_s) %>% pivot_longer(!date)) + 
   geom_line(aes(x=date,y=value,group=name,color=name)) + # facet_wrap(~name,scales="free") + 

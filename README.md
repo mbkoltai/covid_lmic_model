@@ -3,7 +3,8 @@
 **repo under construction/cleanup**
 
 This repo contains scripts to run model fitting and to extract and visualise the results of fits. The scripts are accompanying [this preprint](https://www.medrxiv.org/) (to be uploaded).
-To run simulations you need to download the age-structured compartmental COVID19 model COVIDM; available in several repos, for instance [here](https://github.com/nicholasdavies/newcovid/tree/master/covidm_for_fitting).
+To run simulations you need to download the age-structured compartmental COVID19 model COVIDM; available in several repos, for instance [here](https://github.com/nicholasdavies/newcovid/tree/master/covidm_for_fitting). Once COVIDM is downloaded, update the paths to your directory in the scripts below.
+Data needed to reproduce simulations can be found in the folder
 
 Annotation for the scripts:
 
@@ -13,6 +14,6 @@ Annotation for the scripts:
 
 - *run_multiple_mcmc.R*: run Markov Chain Monte Carlo fitting of COVIDM with excess death data, with variable inputs (IFR, seed size, fitting window)
 
-- *extract_multiple_mcmc_scan_IFR_seedsize.R*: 
+- *extract_multiple_mcmc_scan_IFR_seedsize.R*: extract results of fits where IFR and seed size were varied as input parameters. Used for full fits for period Jan/2020-Oct/2020 (or Febr/2020-Aug/2020)
 
-- *extract_multiple_mcmc_scan_IFR.R*: 
+- *extract_multiple_mcmc_scan_IFR.R*: extract results of fits where only IFR was varied as an input parameter. This was used for the fits with the truncated fitting window Febr/2020-Apr/2020.

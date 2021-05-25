@@ -19,4 +19,5 @@ simul_output/
 ifr_estimates/
 covid_LIC_fcns.R
 covid_LIC_model.R
-somalia_linelist.R 
+somalia_linelist.R
+refresh_gitignore.sh

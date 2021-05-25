@@ -9,3 +9,10 @@ Annotation for the scripts:
 
 -  *somalia_data_model.R*: read in satellite data on burials and NPI stringency. Set up COVIDM, run and visualised individual simulations and compare to data. Read in ACLED and visualise ACLED data on deaths due to political violence. 
 
+- *somalia_data_model_fcns.R*: contains custom-made functions for visualisation, data processing etc.
+
+- *run_multiple_mcmc.R*: run Markov Chain Monte Carlo fitting of COVIDM with excess death data, with variable inputs (IFR, seed size, fitting window)
+
+- *extract_multiple_mcmc_scan_IFR_seedsize.R*: 
+
+- *extract_multiple_mcmc_scan_IFR.R*: 

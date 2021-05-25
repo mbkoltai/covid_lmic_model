@@ -22,7 +22,8 @@ source("somalia_data_model_fcns.R")
 #' ## JHU global covid19 data
 data("coronavirus")
 # age structure
-N_tot=fun_cntr_agestr("Somalia",i_year="2020",age_groups=data.frame(age_group=c(1:16),age_low=c(seq(0,75,5)),age_high=c(seq(4,74,5),100)))
+N_tot=fun_cntr_agestr("Somalia",i_year="2020",age_groups=data.frame(age_group=c(1:16),age_low=c(seq(0,75,5)),
+                                                                    age_high=c(seq(4,74,5),100)))
 # reported case and deaths data
 covid_somal=coronavirus %>% filter(country %in% "Somalia") %>% mutate(rollingmean=roll_mean(cases,7,align="center",fill=NA)) %>%
   mutate(per_million=rollingmean/(sum(N_tot)/1e6),name=str_replace(type,"confirmed","confirmed cases")) %>% rename(value=cases)
@@ -157,10 +158,10 @@ params$processes <- list(cm_multinom_process("Ip",outcomes=data.table(death=soma
                                              delays=data.table(death=cm_delay_gamma(22,22,60,1/4)$p), report="o"))
 # plot IFR for symptomatic vs all infections
 ### ### 
-ggplot(somalia_agegroups_IFR %>% mutate(ifr_symptom=ifr_mean/params$pop[[1]]$y) %>% select(agegroup_mean,ifr_mean,ifr_symptom) %>%
-         pivot_longer(cols=!agegroup_mean)) + geom_line(aes(x=agegroup_mean,y=value*100,color=name)) + 
-  geom_point(aes(x=agegroup_mean,y=value*100,color=name)) + theme_bw() + standard_theme + 
-  scale_x_continuous(breaks=2.5+(0:16)*5) + scale_y_log10(breaks=10^(-5:2))
+# ggplot(somalia_agegroups_IFR %>% mutate(ifr_symptom=ifr_mean/params$pop[[1]]$y) %>% select(agegroup_mean,ifr_mean,ifr_symptom) %>%
+#          pivot_longer(cols=!agegroup_mean)) + geom_line(aes(x=agegroup_mean,y=value*100,color=name)) + 
+#   geom_point(aes(x=agegroup_mean,y=value*100,color=name)) + theme_bw() + standard_theme + 
+#   scale_x_continuous(breaks=2.5+(0:16)*5) + scale_y_log10(breaks=10^(-5:2))
 
 # suscept and clinical fraction age dependent
 suscept_clinfract_posteriors<-read_csv("data/suscept_clinfract_posteriors_davies2010.csv") %>% 
@@ -330,7 +331,3 @@ ggplot(acled_burial_comparison %>% pivot_longer(!c(admin1,date)) %>% filter(date
   theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5),legend.position = "bottom")
 # SAVE
 ggsave("simul_output/somalia/acled_banadir_burials_comparison.png",width=30,height=16,units="cm")
-
-### ### ### ### ### ### ### ### ### ### 
-### flight data
-# flightlist_20191101_20191130 <- read_csv("data/somalia/flight_data/flightlist_20191101_20191130.csv")

@@ -8,7 +8,7 @@ source("somalia_data_model_fcns.R")
 N_tot=fun_cntr_agestr("Somalia",i_year="2020",age_groups=data.frame(age_group=c(1:16),
                                                                     age_low=c(seq(0,75,5)),age_high=c(seq(4,74,5),100)))
 # burial data
-burial_data=read_csv("data/somalia/Mogadishu_data/mogadishu_burial_analysis-main/out_bdr_daily_estimates.csv")
+burial_data=read_csv("data/somalia_data/Mogadishu_data/mogadishu_burial_analysis-main/out_bdr_daily_estimates.csv")
 baseline_daily_burials=mean(subset(burial_data,date>="2019-07-01" & date<="2019-11-01")$new_graves_best_ipol)
 # subset for relevant period and columns
 out_bdr_daily_estimates=burial_data[!rowSums(is.na(burial_data))==(ncol(burial_data)-1),
@@ -40,7 +40,7 @@ IFR_estimates_Sandmann2021 <- read_csv("data/IFR_estimates_Sandmann2021.csv")
 if (any(IFR_estimates_Sandmann2021$value_percent>1)) {n_cols<-2:ncol(IFR_estimates_Sandmann2021)
 IFR_estimates_Sandmann2021[,n_cols]<-IFR_estimates_Sandmann2021[,n_cols]/1e2
 IFR_estimates_Sandmann2021 <- left_join(IFR_estimates_Sandmann2021 %>% rename(agegroup=Age,ifr_mean=value_percent), 
-                                        somalia_agegroups_IFR %>% select(!c(ifr_mean,log_ifr,logit_ifr)),by="agegroup") %>% mutate(logit_ifr=log(ifr_mean/(1-ifr_mean))) }
+          somalia_agegroups_IFR %>% select(!c(ifr_mean,log_ifr,logit_ifr)),by="agegroup") %>% mutate(logit_ifr=log(ifr_mean/(1-ifr_mean))) }
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 # COVIDM
 cm_path="~/Desktop/research/models/epid_models/covid_model/lmic_model/covidm/"
@@ -55,6 +55,7 @@ params$pop[[1]]$dist_seed_ages=cm_age_coefficients(20,30,5*(0:length(params$pop[
 ###
 # multiple mcmc fits
 fitting_params <- c("R0_fit","introd_date","npi_scale") # "seed_size","compliance"
+### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 pf <- function(parameters, x){x=as.list(x); n_groups=length(parameters$pop[[1]]$size)
 # R0

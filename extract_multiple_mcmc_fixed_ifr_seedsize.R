@@ -1,7 +1,12 @@
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+rm(list=ls()); currentdir_path=dirname(rstudioapi::getSourceEditorContext()$path); setwd(currentdir_path)
+lapply(c("tidyverse","deSolve","qs","gtools","rstudioapi","wpp2019","countrycode","coronavirus","wesanderson","dttr2","RcppRoll",
+         "scales","wpp2019","GGally","corrr","ungeviz"), library,character.only=TRUE)
+# functions and plotting theme
+source("somalia_data_model_fcns.R")
 ### multiple fits with fixed CDR, seed size and 3 IFR values
 parscan_mcmc_dirname=
-  "simul_output/somalia/3param_fits_seedsize_IFR_fixed/scan_seedsize_ifr_introddate_N_182_20_fitperiod_20200115_20200413/"
+  "simul_output/somalia/3param_fits_seedsize_IFR_fixed/scan_seedsize_ifr_introddate_N_182_20_fitperiod_20200223_20200413/seedsize200/"
 parfit_scan_files<-list.files(parscan_mcmc_dirname,pattern = ".rds"); # slope_val=round(as.numeric(linregr$coefficients[2]),4)
 # need to have IFR estimates from Sandmann: IFR_estimates_Sandmann2021$logit_ifr
 # how many CDR values were used?
@@ -135,8 +140,7 @@ for (k in 3:6){
                nrow=length(unique(df_posteriors_parscan$ifr_logit_increm)),ncol = 2) + # 
     theme_bw() + standard_theme + labs(color="chains") + ylab(colnames(df_posteriors_parscan)[k]); p
   # SAVE
-  ggsave(paste0(parscan_mcmc_dirname,"mcmc_diagnostics/trace_",colnames(df_posteriors_parscan)[k],".png"),
-         width=30,height=18,units="cm") }
+  ggsave(paste0(parscan_mcmc_dirname,"mcmc_diagnostics/trace_",colnames(df_posteriors_parscan)[k],".png"),width=30,height=18,units="cm") }
 
 # plot posterior likelihoods
 for (k in 4:6){
@@ -181,13 +185,13 @@ fitting_params_best_estim = left_join(posteriors_summary_stats %>% # mutate(CDR=
   select(name,seedsize,ifr_logit_increm,mean),DIC_logllk_values %>% select(!c(deviance,d_p)),by=c("seedsize","ifr_logit_increm")) %>%
   pivot_wider(names_from=name,values_from=mean) %>% # rename(IFR=`IFR all infections (%)`) %>%
   # check start date of simul, rewrite if needed!! # onefit$base_parameters$date0
-  mutate(introd_date=as.Date(onefit$base_parameters$date0)+`introduction (days after 01/10/19)`) %>%
+  mutate(introd_date=as.Date(onefit$base_parameters$date0)+`introduction (days after 01/09/19)`) %>%
   mutate(ifr_all_inf=round(sapply(ifr_logit_increm,
                   function(x) 1e2*sum(inv.logit(IFR_estimates_Sandmann2021$logit_ifr+x)*somalia_agegroups_IFR$agegroup_perc)),2))
 # contact_red=round(max(npi_df$contact_reduction)*NPI_scale,2)
 
 # dynamic fits faceted by (CDR-seedsize), NPI_scale by color
-y_text=45; x_dodge_text=-5; x_date=as.Date("2020-01-16"); y_text_dist=1.8; y_dodge_low=12
+y_text=25; x_dodge_text=-5; x_date=as.Date("2020-01-16"); y_text_dist=1.8; y_dodge_low=12
 ggplot(summ %>% filter(compartment=="death_o")  ) +
   geom_line(aes(x=date,y=mean,color=factor(round(ifr_all_inf,2))),size=1.5) + # ,group=interaction(NPI_scale,CDR),alpha=factor(CDR)
   geom_ribbon(aes(x=date,ymin=lower,ymax=upper,fill=factor(round(ifr_all_inf,2)),color=factor(round(ifr_all_inf,2))),alpha=0.1,
@@ -206,21 +210,21 @@ ggplot(summ %>% filter(compartment=="death_o")  ) +
   # introd date labels
   geom_text(data=fitting_params_best_estim,aes(x=x_date+x_dodge_text,y=as.numeric(factor(ifr_all_inf))*y_text_dist+y_text-y_dodge_low,
                                                label="introd.=",color=factor(ifr_all_inf)),size=4.5,show.legend=FALSE) + 
-  geom_text(data=fitting_params_best_estim,aes(x=x_date+x_dodge_text+15, # introd dates
+  geom_text(data=fitting_params_best_estim,aes(x=x_date+x_dodge_text+16, # introd dates
           y=as.numeric(factor(ifr_all_inf))*y_text_dist+y_text-y_dodge_low,label=paste0(gsub("-","/",introd_date),
           ifelse(as.numeric(factor(CDR))!=length(CDR_vals),",",""))),size=4.5,show.legend=FALSE) + # gsub("2020-|2019-","",introd_date)
   scale_x_date(date_breaks="1 week",limits=as.Date(c("2020-01-01","2020-10-01")),expand=expansion(0.0)) + 
   scale_y_continuous(breaks=(0:35)*2,expand=expansion(0.01,0)) + 
   geom_vline(data=npi_df,aes(xintercept=on),linetype="dashed",show.legend=F,size=0.5,color="darkgrey") + # NPIs
   # NPI labels
-  geom_text(data=npi_df[1:3,],aes(x=on+ifelse(name=="first",20,5),y=y_text+8,label=paste0(ifelse(name=="first","max(Stringency)=",""),
+  geom_text(data=npi_df[1:3,],aes(x=on+ifelse(name=="first",21,5),y=y_text+6,label=paste0(ifelse(name=="first","max(Stringency)=",""),
           round(contact_reduction,2))),size=5) + labs(color="IFR",fill="IFR")
 # SAVE
 ggsave(paste0(parscan_mcmc_dirname,"all_dynamic_fits_NPIcolorcode.png"),width=36,height=18,units="cm")
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 # PLOT DIC as function of CDR~seedsize~ifr NPI_scale
-label_y_dodge=2; x_dashline=(1:4)+0.5 # c(5/6,7/6)
+label_y_dodge=0.2; x_dashline=(1:4)+0.5 # c(5/6,7/6)
 ggplot(fitting_params_best_estim %>% mutate(R0_label=paste0("R0=",round(R0_fit,1)),
                                             npi_max_effect=npi_scale*max(npi_df$contact_reduction)) ) + 
   geom_hpline(aes(x=factor(ifr_all_inf),y=DIC,color=factor(ifr_all_inf),group=ifr_all_inf),width=1, # group=CDR
@@ -231,7 +235,7 @@ ggplot(fitting_params_best_estim %>% mutate(R0_label=paste0("R0=",round(R0_fit,1
   geom_text(aes(x=factor(ifr_all_inf),y=DIC+label_y_dodge,group=ifr_all_inf,label=paste0(gsub("-","/",introd_date),", ",R0_label)),
             position=position_dodge(width=1),size=4) + geom_text(aes(x=factor(ifr_all_inf),y=DIC-label_y_dodge,group=ifr_all_inf,
       label=paste0("NPI maximum effect: ",round(npi_max_effect*100),"%")),position=position_dodge(width=1),size=4) + xlab("IFR (%)") + 
-  ylab("DIC") # + labs(color="IFR (%)",alpha="CDR") # caption="Introd. date not shown when equal to 2019-11-11"
+  ylab("DIC") + labs(color="IFR (%)") # caption="Introd. date not shown when equal to 2019-11-11"
 # SAVE
 ggsave(paste0(parscan_mcmc_dirname,"DIC_xaxis_NPIscaling_colorcode_seedsize_alpha_CDR.png"),width=30,height=14,units="cm")
 
@@ -244,7 +248,7 @@ df_summary_plot=left_join(posteriors_summary_stats %>% filter(!name %in% "CDR") 
   mutate(ifr_all_inf=round(sapply(ifr_logit_increm,
               function(x) 1e2*sum(inv.logit(IFR_estimates_Sandmann2021$logit_ifr+x)*somalia_agegroups_IFR$agegroup_perc)),2) )
 # plot
-x_dodge_val=1; hpline_val=26
+x_dodge_val=1; hpline_val=30
 p <- ggplot(df_summary_plot,aes(x=factor(seedsize),group=ifr_all_inf)) + #  
   geom_linerange(aes(x=factor(ifr_all_inf),ymin=ci95_low,ymax=ci95_up,color=factor(ifr_all_inf)),
                  alpha=0.3,size=hpline_val,show.legend=FALSE) + # position=position_dodge(width=x_dodge_val)

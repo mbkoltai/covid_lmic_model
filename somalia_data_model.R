@@ -107,30 +107,35 @@ NPI_phases=list(first=c("2020-03-19","2020-06-30"),second=c("2020-07-01","2020-0
                 third=c("2020-08-30","2020-10-08"),fourth=c("2020-10-09","2020-11-01"))
 NPIvals=sapply(NPI_phases,function(x) mean(OxCGRT_input$OxCGRT_scaled[OxCGRT_input$date>as.Date(x)[1]&OxCGRT_input$date<as.Date(x)[2]]))
 npi_df=left_join(data.frame(t(data.frame(on_off=c("on","off"),NPI_phases))) %>% add_rownames(var="name") %>% 
-                 filter(!name=="on_off") %>% rename(on=X1,off=X2) %>% mutate(on=as.Date(on),off=as.Date(off)),
-                 data.frame(NPIvals) %>% rownames_to_column(var="name"),by="name") %>% mutate(name=factor(name,levels=unique(name)))
+            filter(!name=="on_off") %>% rename(on=X1,off=X2) %>% mutate(on=as.Date(on),off=as.Date(off)),
+            data.frame(NPIvals) %>% rownames_to_column(var="name"),by="name") %>% mutate(name=factor(name,levels=unique(name))) %>%
+  rename(contact_level=NPIvals) %>% mutate(contact_reduction=1-contact_level)
 # plot
-ggplot(OxCGRT_input) + geom_line(aes(x=date,y=OxCGRT_scaled)) +
-  geom_segment(data=npi_df,aes(x=on,xend=off,y=NPIvals,yend=NPIvals,group=factor(name),color=factor(name)),size=2) + 
+ggplot(OxCGRT_input) + geom_line(aes(x=date,y=1-OxCGRT_scaled)) +
+  geom_segment(data=npi_df,aes(x=on,xend=off,y=contact_reduction,yend=contact_reduction,group=factor(name),color=factor(name)),size=2) + 
   theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5)) + labs(color="NPI phases") +
   scale_x_date(limits=c(min(subset(OxCGRT_input,NPI_on>0)$date)-15,max(out_bdr_daily_estimates$date)+35),breaks="week",
                expand=expansion(0.01,0)) + scale_y_continuous(breaks=(0:10)/10) + 
-  geom_vline(data=npi_df,aes(xintercept=on,color=name),linetype="dashed") + ylab("level of contacts if reduction ~ StringencyIndex")
+  geom_vline(data=npi_df,aes(xintercept=on,color=name),linetype="dashed") + ylab("reduction in contacts (=StringencyIndex)")
 # SAVE
-# ggsave(paste0("simul_output/somalia/OxCGRT_input.png"),width=30,height=18,units="cm")
+# ggsave(paste0("simul_output/somalia/OxCGRT_input_contactreduction.png"),width=30,height=18,units="cm")
 
 ### Somalia population, IFR ------------
 somalia_agegroups_IFR=fcn_merge_ifr_above_age(left_join(fcn_load_age_str("Somalia",n_year="2015",90),
-                                            fcn_load_ifr("data/IFR_by_age_imperial.csv"),by=c("agegroup","agegroup_min")),75)
-somalia_agegroups_IFR$ifr_mean[1]=3e-6; somal_popul_tot=sum(somalia_agegroups_IFR$agegroupsize); mogadishu_popul=2.2e6
+  fcn_load_ifr("data/IFR_by_age_imperial.csv"),by=c("agegroup","agegroup_min")),75) %>% 
+  mutate(ifr_mean=ifelse(ifr_mean==0,min(ifr_mean[ifr_mean>0]),ifr_mean),log_ifr=log(ifr_mean),logit_ifr=log(ifr_mean/(1-ifr_mean)))
+somal_popul_tot=sum(somalia_agegroups_IFR$agegroupsize); mogadishu_popul=2.2e6 # somalia_agegroups_IFR$ifr_mean[1]=3e-6; 
 # other IFR estimates
 # from Sandmann 2021 cmmid paper
 IFR_estimates_Sandmann2021<-read_csv("data/IFR_estimates_Sandmann2021.csv")
  if (any(IFR_estimates_Sandmann2021$value_percent>1)) {n_cols<-2:ncol(IFR_estimates_Sandmann2021)
-   IFR_estimates_Sandmann2021[,n_cols]<-IFR_estimates_Sandmann2021[,n_cols]/1e2}
+   IFR_estimates_Sandmann2021[,n_cols]<-IFR_estimates_Sandmann2021[,n_cols]/1e2; 
+   IFR_estimates_Sandmann2021 <- left_join(IFR_estimates_Sandmann2021 %>% rename(agegroup=Age,ifr_mean=value_percent), 
+        somalia_agegroups_IFR %>% select(!c(ifr_mean,log_ifr,logit_ifr)),by="agegroup") %>% mutate(logit_ifr=log(ifr_mean/(1-ifr_mean)))
+   }
 ggplot(data.frame(age=factor(somalia_agegroups_IFR$agegroup,levels=unique(somalia_agegroups_IFR$agegroup)),
-                  imper=somalia_agegroups_IFR$ifr_mean,sandmann=IFR_estimates_Sandmann2021$value_percent) %>%
-  pivot_longer(!age),aes(x=age,y=value,group=name,color=name)) + geom_line() + geom_point() + theme_bw() + scale_y_log10()
+                  imper=somalia_agegroups_IFR$logit_ifr,sandmann=IFR_estimates_Sandmann2021$logit_ifr) %>% pivot_longer(!age),
+  aes(x=age,y=value,group=name,color=name)) + geom_line() + geom_point() + theme_bw() + ylab("logit(IFR)")
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 # COVIDM
 cm_path="~/Desktop/research/models/epid_models/covid_model/lmic_model/covidm/"
@@ -143,11 +148,10 @@ params$pop[[1]]$size=somalia_agegroups_IFR$agegroupsize*(mogadishu_popul/sum(som
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### SEEDING ---
 npi_on_day=min(OxCGRT_input$date[OxCGRT_input$NPI_on>0]); introd_day=as.Date("2019-12-01")
-seeding_t_window=sapply(c(introd_day,introd_day),function(x) as.numeric(x-as.Date(params$date0)))
-seedsize_per_day=50
-params$pop[[1]]$seed_times=rep(seeding_t_window[1]:seeding_t_window[2],each=seedsize_per_day) # x new infections/day for n days
+seeding_t_window=sapply(rep(introd_day,2),function(x) as.numeric(x-as.Date(params$date0)))
+params$pop[[1]]$seed_times=rep(seeding_t_window[1]:seeding_t_window[2],each=50) # x new infections/day for n days
 # infections start in individuals aged 20-50, 1 introd in each age group
-params$pop[[1]]$dist_seed_ages=cm_age_coefficients(20,60,5*(0:length(params$pop[[1]]$size)))
+params$pop[[1]]$dist_seed_ages=cm_age_coefficients(20,40,5*(0:length(params$pop[[1]]$size)))
 ### add death process to model ------
 params$processes <- list(cm_multinom_process("Ip",outcomes=data.table(death=somalia_agegroups_IFR$ifr_mean/params$pop[[1]]$y),
                                              delays=data.table(death=cm_delay_gamma(22,22,60,1/4)$p), report="o"))
@@ -161,10 +165,28 @@ ggplot(somalia_agegroups_IFR %>% mutate(ifr_symptom=ifr_mean/params$pop[[1]]$y) 
 # suscept and clinical fraction age dependent
 suscept_clinfract_posteriors<-read_csv("data/suscept_clinfract_posteriors_davies2010.csv") %>% 
   mutate(agegroup=factor(agegroup,levels=unique(agegroup)))
-ggplot(suscept_clinfract_posteriors %>% mutate(name=gsub("clin_fract","clinical fraction",name)),
-    aes(x=agegroup,y=value,group=1)) + geom_line() + geom_point() + ylab("proportion/normalised value") +
-    facet_wrap(~name,scales="free") + theme_bw() + scale_y_continuous(breaks=(2:20)/20)
+susc_clinfract_plot=rbind(suscept_clinfract_posteriors %>% mutate(type="literature"),
+          rbind(data.frame(name="clin_fract",agegroup=unique(suscept_clinfract_posteriors$agegroup),value=params$pop[[1]]$y,type="approx"),
+  data.frame(name="susceptibility",agegroup=unique(suscept_clinfract_posteriors$agegroup),value=c(rep(0.38,4),rep(0.8,12)),type="approx"))) %>%
+  mutate(name=gsub("clin_fract","clinical fraction",name))
+ggplot(susc_clinfract_plot,aes(x=agegroup,y=value,color=type,group=type)) + geom_line() + geom_point() + 
+  facet_wrap(~name,scales="free") + theme_bw() + standard_theme + scale_y_continuous(breaks=(2:20)/20) + 
+  theme(axis.text.x=element_text(vjust = 0.5)) + ylab("proportion/normalised value")
+# SAVE
+ggsave("simul_output/somalia/clinfract_susc_lit_approx.png",width=30,height=16,units="cm")
 params$pop[[1]]$y=fun_lin_approx_agedep_par(agegroups=somalia_agegroups_IFR,min_val=0.25,max_val=0.7,rep_min=6,rep_max=2)
+# plot IFR original vs adjusted
+ggplot(cbind(data.frame(age=factor(somalia_agegroups_IFR$agegroup,levels=unique(somalia_agegroups_IFR$agegroup)),
+                  literature=IFR_estimates_Sandmann2021$ifr_mean),
+  data.frame(sapply(c(1,2,3), function(x) {inv.logit(logit(IFR_estimates_Sandmann2021$ifr_mean) + x)}))) %>% 
+    rename(`logit(IFR)+1`=X1,`logit(IFR)+2`=X2,`logit(IFR)+3`=X3) %>% pivot_longer(!age),
+  aes(x=age,y=value,group=name,color=name)) + geom_line() + geom_point() + theme_bw() + ylab("IFR") + labs(color="") + 
+  scale_y_log10( breaks = scales::trans_breaks("log10", function(x) 10^x),
+                 labels = scales::trans_format("log10", scales::math_format(10^.x)) ) + annotation_logticks(sides="lr") +
+  theme(axis.text=element_text(size=13),axis.text.x=element_text(angle=90,vjust=0.5),axis.title=element_text(size=15),
+        legend.text=element_text(size=15))
+# SAVE
+ggsave("simul_output/somalia/IFR_shifted_logit.png",width=25,height=16,units="cm")
 # change susceptibility to get R0
 # susceptibility estimates from (warwick): 
 # susceptibility_warvick_model <- left_join(read_csv("data/susceptibility_warvick_model.csv") %>% mutate(value=value/max(value)),
@@ -202,229 +224,30 @@ seeding_df=data.frame(seed_date=unique(covidm_simul$date)[unique(params$pop[[1]]
 ggplot(subset(covidm_simul,!dynam_type %in% "preval")) + geom_area(aes(x=date,y=value,fill=compartment),color="black",size=0.3) +
   facet_wrap(dynam_type~compartm_type,scales="free") + theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5)) +
   scale_x_date(limits=as.Date(c("2019-12-01",params$time1)),date_breaks="2 weeks",expand=expansion(0,0)) + ylab("number") + 
-  scale_y_continuous(expand=expansion(0.01,0)) +geom_vline(data=npi_df,aes(xintercept=on,color=name),size=1,linetype="dashed") +
+  scale_y_continuous(expand=expansion(0.01,0)) + geom_vline(data=npi_df,aes(xintercept=on,color=name),size=1,linetype="dashed") +
   geom_rect(data=seeding_df,aes(xmin=min,xmax=max,ymin=0,ymax=Inf),fill="pink",color=NA,alpha=0.4) + labs(fill="")
 # SAVE
-# ggsave(paste0("simul_output/somalia/covidm",cm_version,"_suscept_warvick","_output.png"),width=30,height=20,units="cm")
+# ggsave(paste0("simul_output/somalia/agegroups_summed_output_introddate_noninteg.png"),width=30,height=20,units="cm")
 
 # PLOT incident deaths with data
 # out_bdr_daily_estimates %>% select(date,new_graves_best_ipol,daily_baseline_subtr,rollmeanweek)
 fitting_date_window=as.Date(c("2020-01-15","2020-10-01"))
-fcn_covidm_singlesim_error(covidm_simul,introd_day,seedsize_per_day,out_bdr_daily_estimates,fitting_date_window)
+fcn_covidm_singlesim_error(covidm_simul,introd_day,seedsize = 50,out_bdr_daily_estimates,fitting_date_window)
 ###
 # IFR
 # IFR: linear regression -> generate new values
-somalia_agegroups_IFR = somalia_agegroups_IFR %>% mutate(log_ifr=log(ifr_mean),logit_ifr=log(ifr_mean/(1-ifr_mean)))
-# ggplot(somalia_agegroups_IFR,aes(x=agegroup_mean)) + geom_line(aes(y=log_ifr)) + geom_point(aes(y=log_ifr)) + 
-#   geom_line(aes(y=logit_ifr),color="red") + geom_point(aes(y=logit_ifr),color="red")+ scale_x_continuous(breaks=2.5+(0:16)*5)
-linregr=lm(logit_ifr~agegroup_mean,data=somalia_agegroups_IFR %>% select(agegroup_mean,logit_ifr) )
-ggplot(somalia_agegroups_IFR %>% 
-  mutate(pred_ifr=inv.logit(linregr$coefficients["(Intercept)"]+linregr$coefficients["agegroup_mean"]*somalia_agegroups_IFR$agegroup_mean)) %>%
-       select(agegroup_mean,ifr_mean,pred_ifr) %>% rename(estimate=ifr_mean,fit=pred_ifr) %>% pivot_longer(!c(agegroup_mean)),
-       aes(x=agegroup_mean,y=value*1e2,group=name,color=name)) + geom_line(size=1.05) + geom_point(size=2) +
+# IFR_estimates_Sandmann2021 # somalia_agegroups_IFR
+linregr=lm(logit_ifr~agegroup_mean,data=IFR_estimates_Sandmann2021 %>% select(agegroup_mean,logit_ifr) )
+ggplot(IFR_estimates_Sandmann2021 %>% mutate(pred_ifr=
+  inv.logit(linregr$coefficients["(Intercept)"]+linregr$coefficients["agegroup_mean"]*somalia_agegroups_IFR$agegroup_mean),
+  raised_ifr=inv.logit(logit_ifr + 1)) %>% select(agegroup_mean,ifr_mean,pred_ifr,raised_ifr) %>% 
+    rename(`estimate in literature`=ifr_mean,fit=pred_ifr) %>% 
+  pivot_longer(!c(agegroup_mean)),aes(x=agegroup_mean,y=value*1e2,group=name,color=name)) + geom_line(size=1.05) + geom_point(size=2) +
   theme_bw() + standard_theme + scale_x_continuous(breaks=2.5+(0:16)*5) + labs(color="") + xlab("age (year)") + ylab("IFR %") +
   theme(axis.text.x=element_text(vjust=0.5,size=12),axis.text.y=element_text(size=12)) +
-  scale_y_log10(limits=c(1e-4,10^1.1),breaks=scales::trans_breaks("log10",function(x) 10^x))
+  scale_y_log10(breaks=scales::trans_breaks("log10",function(x) 10^x)) # limits=c(1e-4,10^2),
 # ggsave("simul_output/somalia/IFR_consensus_estimate_fit.png",width=15,height=10,units="cm")
 # predicted IFR: exp(-10.8 + 0.1*c(2.5+(0:14)*5,80.255))
-
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
-### MCMC --------------
-### ### ### ### ### ### ### ###
-# define parameters func, which interprets a proposal for the posterior distribution as a parameter set usable by the underlying model.
-fitting_params <- c("R0_fit","introd_date","seed_size","ifr_logit_intercept", "compliance")
-pf <- function(parameters, x){x=as.list(x); n_groups=length(parameters$pop[[1]]$size);
-    # R0
-    target_R0=2 # cm_calc_R0(params,1) # params$pop[[1]]$u
-    parameters$pop[[1]]$u=c(rep(0.0145,4),rep(0.0305,12))*(x$R0_fit/target_R0)
-    # seed size and introd date
-    parameters$pop[[1]]$seed_times=rep(x$introd_date:x$introd_date,each=x$seed_size)
-  # IFR
-  agegroupmeans=c(2.5+(0:14)*5,80.255); slope_val=as.numeric(linregr$coefficients["agegroup_mean"])
-  parameters$processes<-list(cm_multinom_process("Ip",
-                              outcomes=data.table(death=inv.logit(x$ifr_logit_intercept+slope_val*agegroupmeans)/parameters$pop[[1]]$y),
-                                          delays=data.table(death=data.table(death=cm_delay_gamma(22,22,60,1/4)$p)),report="o"))
-  # compliance
-  t_npi=list(first=c("2020-03-19","2020-06-30"),second=c("2020-07-01","2020-08-29"),
-              third=c("2020-08-30","2020-10-08"),fourth=c("2020-10-09","2020-11-01")); npi_vals=c(0.455,0.736,0.593,0.624)
-    for (k in 1:length(npi_vals)) { if (k==1) {iv=cm_iv_build(parameters)}
-      cm_iv_contact(iv, t_npi[[k]][1], t_npi[[k]][2], 1 - (1-as.numeric(rep(npi_vals[k],4)) )*x$compliance ) 
-      if (k==length(npi_vals)) {parameters$pop[[1]]$schedule=NULL; parameters=cm_iv_apply(parameters,iv)} }
-    return (parameters) }
-# priors
-priors=list(R0_fit="N 3 1 T 1 5", introd_date="N 90 30 T 10 120",seed_size="U 1 5",ifr_logit_intercept="U -12 -6",compliance="U 0 1")
-# define likelihood function
-likelihood = function(parameters, dynamics, data, x){
-  inc = data; inc[, t := as.numeric(date - ymd(parameters$date0))]
-  eval = merge(dynamics[compartment == "death_o", .(model_case = sum(value)), by = t], inc, by = "t");
-  ll = sum(dpois(eval$new_deaths, lambda = pmax(0.1, eval$model_case), log = T)); return (ll) }
-###  fitting data - scaling by CDR ----------------
-# ESTIMATE of Mogadishu death rate: 0.2-0.6 deaths/10^4 person-days. 0.4 deaths/(10K ppl*day) -> Mogadishu=2.2M -> 616 deaths/week
-# CDR_val=0.2; # mogad_daily_death_rate=mogadishu_popul*CDR_val/1e4
-CDR_vals=c(0.0422654,0.1,0.2,0.4); scale_factor=(mogadishu_popul*CDR_vals[1]/1e4)/baseline_daily_burials
-fitting_incidence <- data.table(out_bdr_daily_estimates %>% select(date,daily_baseline_subtr) %>% 
-                mutate(daily_baseline_subtr=round(daily_baseline_subtr*scale_factor)) %>% 
-                filter(date>=fitting_date_window[1]&date<=fitting_date_window[2]) %>% rename(new_deaths=daily_baseline_subtr))
-### fitting -------------------
-fit=cm_fit(base_parameters=params, priors=priors, parameters_func=pf, likelihood_func=likelihood,
-  data=fitting_incidence, mcmc_burn_in=500, mcmc_samples=2000, mcmc_init_opt=F, opt_maxeval=25 )
-
-### ### ### ### ### ### ### ### ### ###
-# load RDS file with several fits (different CDR values)
-mcmc_filename="simul_output/somalia/fits_death2020-02-23_2020-10-01_seedsize_U_1_100.rds" 
-fits_death_scaling <- readRDS(mcmc_filename)
-foldertag=gsub("mcmc_","",
-            paste0(paste0(paste0(c(min(fits_death_scaling[[1]]$data$date),max(fits_death_scaling[[1]]$data$date)),collapse="_"),"_"),
-                                 paste0("seedsize_",gsub(" ","_",fits_death_scaling[[1]]$priors$seed_size),"_"),
-                                 paste0(names(fits_death_scaling[[1]]$options[c("mcmc_burn_in","mcmc_samples")]),
-         as.numeric(fits_death_scaling[[1]]$options[c("mcmc_burn_in","mcmc_samples")]),collapse = "_") ) )
-mcmc_foldername=paste0("simul_output/somalia/fit_",foldertag); if (!dir.exists(mcmc_foldername)) {dir.create(mcmc_foldername); file.copy(mcmc_filename,mcmc_foldername)}
-# CDR_vals=c(baseline_daily_burials*1e4/mogadishu_popul,0.1,0.2,0.4); slope_val=linregr$coefficients["agegroup_mean"]
-# fitting_date_window
-for (k in 1:length(CDR_vals)) {
-  df_posteriors=fits_death_scaling[[k]]$posterior %>% select(chain,trial,lp,all_of(fitting_params)) %>% 
-    mutate(`IFR sympt. infections (%)`=1e2*sapply(ifr_logit_intercept,
-    function(x) sum(inv.logit(x+slope_val*somalia_agegroups_IFR$agegroup_mean)*somalia_agegroups_IFR$agegroup_perc) ),
-    `IFR all infections (%)`=1e2*sapply(ifr_logit_intercept,function(x) 
-      sum(inv.logit(x+slope_val*somalia_agegroups_IFR$agegroup_mean)*somalia_agegroups_IFR$agegroup_perc*params$pop[[1]]$y))) %>%
-    mutate(CDR=round(CDR_vals[k],3))
-  if (k==1){df_posteriors_comb=df_posteriors} else {df_posteriors_comb=rbind(df_posteriors_comb,df_posteriors)} }
-
-# extract prior # cm_evaluate_distribution(fits_death_scaling[[1]]$priors$R0_fit)
-
-# calculate mean, median, CIs
-posterior_CI95 = df_posteriors_comb %>% mutate(n=row_number()) %>% pivot_longer(!c(n,CDR,chain,trial,lp)) %>% 
-  group_by(name,CDR) %>% summarise(mean=mean(value),median=median(value),
-            ci95_low=quantile(value,probs=c(2.5,97.5)/1e2)[1],ci95_up=quantile(value,probs=c(2.5,97.5)/1e2)[2],
-            ci50_low=quantile(value,probs=c(25,75)/1e2)[1],ci50_up=quantile(value,probs=c(25,75)/1e2)[2] ) %>%
-  mutate(name=ifelse(name %in% "introd_date","introduction (days after 01/Nov/2019)",name),
-         name=ifelse(name %in% "compliance","NPI compliance (0 to 1)",name))
-# plot median and CIs
-ggplot(posterior_CI95 %>% filter(!name %in% c("ifr_logit_intercept","IFR sympt. infections (%)")),
-       aes(x=factor(CDR),group=CDR,color=factor(CDR))) + scale_y_continuous(expand=expansion(0.1,0)) +
-  geom_linerange(aes(ymin=ci95_low,ymax=ci95_up),position=position_dodge2(width=0.25),alpha=0.3,size=3) +
-  geom_linerange(aes(ymin=ci50_low,ymax=ci50_up),position=position_dodge2(width=0.25),alpha=0.5,size=3) +
-  geom_point(aes(y=median),pch="-",size=10,color="black") + facet_wrap(~name,scales="free") + theme_bw() + standard_theme + xlab("") + 
-  ylab("mean (CI50, CI95)") + theme(axis.text.x=element_blank(),axis.ticks.x=element_blank()) + labs(color="CDR",
-  caption=paste0("Burn-in: ",fits_death_scaling[[1]]$options$mcmc_burn_in,
-                 ", Samples: ",fits_death_scaling[[1]]$options$mcmc_samples," (MCMC)")) +
-  geom_text(aes(x=factor(CDR),y=median,label=round(median,2)),nudge_x=0.35,color="black",size=3.5)
-# SAVE
-ggsave(paste0(mcmc_foldername,"/posteriors_mean_CIs_CDRscan.png"),width=30,height=18,units="cm")
-
-# plot IFR estimates
-i_col=3:6; ifr_estimates = bind_rows(lapply(1:length(CDR_vals), function(k) cbind(somalia_agegroups_IFR %>% 
-  select(agegroup_mean),CDR=round(CDR_vals[k],3),
-  sapply(as.numeric(array(subset(posterior_CI95,name %in% "ifr_logit_intercept" & CDR==round(CDR_vals[k],3))[,i_col])), function(x) 
- inv.logit(x+linregr$coefficients["agegroup_mean"]*somalia_agegroups_IFR$agegroup_mean)*params$pop[[1]]$y)))) %>% mutate(datatype="fit")
-colnames(ifr_estimates)[i_col] <- colnames(posterior_CI95)[i_col]
-ifr_estimates=bind_rows(ifr_estimates,somalia_agegroups_IFR %>% select(agegroup_mean,ifr_mean) %>% 
-        mutate(ifr_mean=ifr_mean*params$pop[[1]]$y) %>% rename(median=ifr_mean) %>% 
-          mutate(datatype="estimate from data" ) ) %>% mutate(CDR=ifelse(is.na(CDR),"estimate from literature",CDR))
-# plot age~IFR curves
-ggplot(ifr_estimates,aes(x=agegroup_mean)) + 
-  geom_line(aes(y=median*1e2,group=CDR,color=factor(CDR),linetype=factor(datatype)),size=1.05) + 
-  geom_point(aes(y=median*1e2,group=CDR,color=factor(CDR),linetype=factor(datatype)),size=2) + labs(color="CDR",linetype="",fill="CDR") +
-  geom_ribbon(aes(ymin=ci95_low*1e2,ymax=ci95_up*1e2,group=CDR,fill=factor(CDR)),alpha=0.2) + theme_bw() + standard_theme + 
-  scale_x_continuous(breaks=2.5+(0:16)*5) + theme(axis.text.x=element_text(vjust=0.5,size=12),axis.text.y=element_text(size=12)) + 
-  scale_y_log10(breaks=scales::trans_breaks("log10",function(x) 10^x,n=12),labels=scales::trans_format("log10",scales::math_format(10^.x))) +
-  labs(caption=paste0("Burn-in: ",fits_death_scaling[[1]]$options$mcmc_burn_in,", Samples: ",fits_death_scaling[[1]]$options$mcmc_samples," (MCMC)")) +
-  xlab("median age per age group (year)") + ylab("IFR %")
-# SAVE
-ggsave(paste0(mcmc_foldername,"/ifr_mcmc_estimates_CDRscan.png"),width=20,height=12,units="cm")
-
-### plot traces from MCMC ----------------
-ggplot(df_posteriors_comb %>% select(!`IFR sympt. infections (%)`,`IFR all infections (%)`,CDR) %>% 
-         pivot_longer(!c(chain,trial,lp,CDR))) + geom_line(aes(x=trial,y=value,group=chain,color=factor(chain))) + 
-  facet_grid(name~CDR,scales="free",labeller=labeller(CDR=label_both)) + theme_bw() + standard_theme + labs(color="chains")
-# SAVE
-ggsave(paste0(mcmc_foldername,"/MCMC_convergence.png"),width=30,height=20,units="cm")
-
-### correlations between parameters ----------------
-# scatterplots + corrs for all values of CDR
-ggpairs(df_posteriors_comb %>% select(all_of(fitting_params),CDR) %>% mutate(CDR=factor(CDR)),aes(color=CDR,alpha=0.4)) +
-  theme_bw() + standard_theme
-# SAVE
-ggsave(paste0(mcmc_foldername,"/param_corrs_CDRall_values.png"),width=30,height=24,units="cm")
-# for 1 value of CDR
-# ggpairs(df_posteriors_comb %>% filter(CDR==unique(CDR)[1]) %>% select(all_of(fitting_params)),aes(alpha=0.4)) +
-#   theme_bw() + standard_theme # + theme(strip.text.x = element_text(size=9))
-# ggsave(paste0(mcmc_foldername,"/param_corrs_CDR",round(unique(CDR_vals)[1],3),".png"),width=30,height=24,units="cm")
-# corrs only
-pairwise_corrs = bind_rows(lapply(unique(df_posteriors_comb$CDR), function(x) cbind(df_posteriors_comb %>% filter(CDR==x) %>%
-   select(all_of(fitting_params)) %>% corrr::correlate() %>% corrr::shave() %>% corrr::stretch() ,CDR=x))) %>% # 
-  mutate(x=factor(x,levels=unique(x)),y=factor(y,levels=unique(y)),highlight_color=ifelse(abs(r)<0.7|is.na(r),0,1)) # %>% filter(!is.na(r))
-# plot
-ggplot(pairwise_corrs,aes(x,y,fill=r)) + geom_tile(aes(color=factor(highlight_color)),size=2,width=0.96,height=0.96) + 
-  facet_wrap(~CDR,labeller=labeller(CDR=label_both)) + geom_text(aes(label=round(r,2)),size=5) + 
-  scale_x_discrete(expand=c(0,0.02)) + scale_y_discrete(expand=c(0,0.02)) +
-  scale_fill_gradient2(low="blue",mid="white",high="red",limit=c(-1,1)) + scale_color_manual(values=c(NA,"black"),guide=FALSE) +
-  standard_theme + theme_bw() + theme(panel.grid.major=element_blank(),panel.grid.minor=element_blank()) +xlab("") + ylab("")
-# SAVE
-ggsave(paste0(mcmc_foldername,"/param_corrs_CDR.png"),width=30,height=24,units="cm")
-
-### plot PRIORS + posteriors ----------------
-for (k in 1:length(unique(df_posteriors_comb$CDR))) {
-  cm_plot_posterior_mod(fits_death_scaling[[k]],plot_params = list(n_bin=50,line_width=0.7,cdr_val=CDR_vals[k]))
-  ggsave(paste0(mcmc_foldername,"/priors_posteriors_CDR_",round(CDR_vals[k],3),".png"),width=30,height=20,units="cm") }
-# pairwise
-cm_plot_pairwise_mod(fits_death_scaling[[k]],standard_theme)
-
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-# use posterior to generate sample dynamics from the model
-for (k in 1: length(fits_death_scaling)){ dyn=cm_sample_fit(fits_death_scaling[[k]], 25) %>% mutate(CDR=CDR_vals[k])
-if (k==1) {dyn_all=dyn} else {dyn_all=rbind(dyn_all,dyn)}; print(k) }
-
-# summarize these runs
-summ = dyn_all %>% filter(compartment %in% c("S","death_o")) %>% group_by(t,run,compartment,CDR) %>% summarise(value=sum(value)) %>%
-  group_by(run,compartment,CDR) %>% mutate(value=ifelse(compartment %in% "S",(value[t==0]-value)/value[t==0],value), # /value[t==0]
-         compartment=ifelse(compartment %in% "S","attack_rate",as.character(compartment))) %>% group_by(t,compartment,CDR) %>% 
-  summarise(lower=hdi(value)[[1]],upper=hdi(value)[[2]],mean=mean(value) ) %>% 
-  mutate(date=as.Date(seq(as.Date(params$date0),as.Date(params$date0)+max(t),1)[t+1]),CDR=round(CDR,5))
-write_csv(summ,paste0(mcmc_foldername,"/summ.csv"))
-
-# fitting data (deaths incidence)
-# CDR_vals=c(0.0422654,0.1,0.2,0.4) # scale_factor=(mogadishu_popul*CDR_vals[k]/1e4)/baseline_daily_burials
-fitting_incidence_modelcompare = bind_rows(lapply((mogadishu_popul*CDR_vals/1e4)/baseline_daily_burials, function(x)
-  data.table(out_bdr_daily_estimates %>% select(date,daily_baseline_subtr) %>% 
-  mutate(daily_baseline_subtr=round(daily_baseline_subtr*x),CDR=x*1e4*baseline_daily_burials/mogadishu_popul,CDR=round(CDR,5),
-  date_within_fitting_t=ifelse(date>=min(fits_death_scaling[[1]]$data$date)&date<=max(fits_death_scaling[[1]]$data$date),TRUE,FALSE)) %>%
-           rename(new_deaths=daily_baseline_subtr)) ))
-# calculate likelihood, deviance, DIC
-DIC_logllk_values <- left_join(right_join(summ %>% filter(compartment=="death_o") %>% select(!c(lower,upper)),
-            subset(fitting_incidence_modelcompare, date_within_fitting_t) %>% select(!date_within_fitting_t),by=c("CDR","date")) %>% 
-                                 mutate(logllk=dpois(new_deaths,lambda=mean,log=T)) %>% group_by(CDR) %>% 
-                                 summarise(sum_logllk=sum(logllk),deviance=-2*sum_logllk,d_p=var(-2*logllk)/2,DIC=deviance+d_p),
-                               fitting_incidence_modelcompare %>% group_by(CDR) %>% summarise(maxval=max(new_deaths)),by="CDR")
-# sum(dpois(eval$new_deaths, lambda = pmax(0.1, eval$model_case), log = T))
-
-# show model fit
-fitting_dates=fits_death_scaling[[1]]$data %>% summarise(min_date=min(date),max_date=max(date))
-ggplot(summ %>% filter(compartment=="death_o")) + 
- geom_line(aes(x=date,y=mean), colour="blue") + geom_ribbon(aes(x=date,ymin=lower,ymax=upper), fill="blue",alpha=0.2) + 
- geom_line(data=fitting_incidence_modelcompare %>% mutate(t=as.numeric(date)),aes(x=date,y=new_deaths),linetype="dashed",size=0.3) +
- geom_point(data=fitting_incidence_modelcompare %>% mutate(t=as.numeric(date)),aes(x=date,y=new_deaths),fill=NA,shape=1) +
- facet_wrap(~CDR,scales="free",labeller=labeller(CDR=label_both)) + 
- geom_rect(data=fitting_dates,aes(xmin=min_date,xmax=max_date,ymin=-Inf,ymax=Inf),fill="pink",alpha=0.2,linetype="dashed",color="red") + 
- xlab("") + ylab("deaths (daily)") + standard_theme + theme_bw() + theme(axis.text.x=element_text(vjust=0.5,angle=90)) + 
- geom_text(data=DIC_logllk_values,aes(x=fitting_dates$min_date+20,y=0.9*maxval,label=paste0("DIC=",round(DIC))),color="black",size=3.5) +
- scale_x_date(date_breaks="week",limits=as.Date(c("2020-01-01","2020-10-15")),expand=expansion(0.0)) + 
- scale_y_continuous(breaks=(0:20)*10,expand=expansion(0,0))
-# save
-ggsave(paste0(mcmc_foldername,"/dynamics_fit_deaths_CDR_scan.png"),width=30,height=16,units="cm")
-
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-### attack rate plot
-p <- ggplot(summ %>% filter(compartment=="attack_rate")) + 
-  geom_line(aes(x=date,y=mean,group=CDR,color=factor(CDR)),size=1.2) + facet_wrap(~CDR,nrow=length(CDR_vals),labeller=labeller(CDR=label_both)) +
-  geom_ribbon(aes(x=date,ymin=lower,ymax=upper,group=CDR,fill=factor(CDR)),alpha=0.2) + labs(color="CDR",fill="CDR") + 
-  standard_theme + theme_bw() + xlab("") + ylab("cumulative attack rate") + theme(axis.text.x=element_text(vjust=0.5,angle=90)) +
-  scale_x_date(date_breaks="week",limits=as.Date(c("2020-01-10","2020-11-01")),expand=expansion(0.0)) + 
-  scale_y_continuous(breaks=(0:20)/20,expand=expansion(0,0)); p
-# SAVE
-att_rate_filename<-paste0(mcmc_foldername,"/dynamics_cumulattackrate_deaths_CDRscan.png")
-if (length(p$facet$params$facets)>0) {att_rate_filename <- gsub(".png","_faceted.png",att_rate_filename)}
-ggsave(att_rate_filename,width=22,height=16,units="cm")
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###

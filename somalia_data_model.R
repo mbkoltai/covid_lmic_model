@@ -123,16 +123,16 @@ ggplot(OxCGRT_input) + geom_line(aes(x=date,y=1-OxCGRT_scaled)) +
 
 ### Somalia population, IFR ------------
 somalia_agegroups_IFR=fcn_merge_ifr_above_age(left_join(fcn_load_age_str("Somalia",n_year="2015",90),
-  fcn_load_ifr("data/IFR_by_age_imperial.csv"),by=c("agegroup","agegroup_min")),75) %>% 
+  fcn_load_ifr("repo_data/IFR_by_age_imperial.csv"),by=c("agegroup","agegroup_min")),75) %>% 
   mutate(ifr_mean=ifelse(ifr_mean==0,min(ifr_mean[ifr_mean>0]),ifr_mean),log_ifr=log(ifr_mean),logit_ifr=log(ifr_mean/(1-ifr_mean)))
 somal_popul_tot=sum(somalia_agegroups_IFR$agegroupsize); mogadishu_popul=2.2e6 # somalia_agegroups_IFR$ifr_mean[1]=3e-6; 
 # other IFR estimates
 # from Sandmann 2021 cmmid paper
-IFR_estimates_Sandmann2021<-read_csv("data/IFR_estimates_Sandmann2021.csv")
+IFR_estimates_Sandmann2021<-read_csv("repo_data/IFR_estimates_Sandmann2021.csv")
  if (any(IFR_estimates_Sandmann2021$value_percent>1)) {n_cols<-2:ncol(IFR_estimates_Sandmann2021)
    IFR_estimates_Sandmann2021[,n_cols]<-IFR_estimates_Sandmann2021[,n_cols]/1e2; 
    IFR_estimates_Sandmann2021 <- left_join(IFR_estimates_Sandmann2021 %>% rename(agegroup=Age,ifr_mean=value_percent), 
-        somalia_agegroups_IFR %>% select(!c(ifr_mean,log_ifr,logit_ifr)),by="agegroup") %>% mutate(logit_ifr=log(ifr_mean/(1-ifr_mean)))
+      somalia_agegroups_IFR %>% select(!c(ifr_mean,log_ifr,logit_ifr)),by="agegroup") %>% mutate(logit_ifr=log(ifr_mean/(1-ifr_mean)))
    }
 ggplot(data.frame(age=factor(somalia_agegroups_IFR$agegroup,levels=unique(somalia_agegroups_IFR$agegroup)),
                   imper=somalia_agegroups_IFR$logit_ifr,sandmann=IFR_estimates_Sandmann2021$logit_ifr) %>% pivot_longer(!age),
@@ -153,16 +153,11 @@ seeding_t_window=sapply(rep(introd_day,2),function(x) as.numeric(x-as.Date(param
 params$pop[[1]]$seed_times=rep(seeding_t_window[1]:seeding_t_window[2],each=50) # x new infections/day for n days
 # infections start in individuals aged 20-50, 1 introd in each age group
 params$pop[[1]]$dist_seed_ages=cm_age_coefficients(20,40,5*(0:length(params$pop[[1]]$size)))
+# set approximate clin fract values (From Davies 2020 Nat Med)
+params$pop[[1]]$y=fun_lin_approx_agedep_par(agegroups=somalia_agegroups_IFR,min_val=0.25,max_val=0.7,rep_min=6,rep_max=2)
 ### add death process to model ------
 params$processes <- list(cm_multinom_process("Ip",outcomes=data.table(death=somalia_agegroups_IFR$ifr_mean/params$pop[[1]]$y),
                                              delays=data.table(death=cm_delay_gamma(22,22,60,1/4)$p), report="o"))
-# plot IFR for symptomatic vs all infections
-### ### 
-# ggplot(somalia_agegroups_IFR %>% mutate(ifr_symptom=ifr_mean/params$pop[[1]]$y) %>% select(agegroup_mean,ifr_mean,ifr_symptom) %>%
-#          pivot_longer(cols=!agegroup_mean)) + geom_line(aes(x=agegroup_mean,y=value*100,color=name)) + 
-#   geom_point(aes(x=agegroup_mean,y=value*100,color=name)) + theme_bw() + standard_theme + 
-#   scale_x_continuous(breaks=2.5+(0:16)*5) + scale_y_log10(breaks=10^(-5:2))
-
 # suscept and clinical fraction age dependent
 suscept_clinfract_posteriors<-read_csv("data/suscept_clinfract_posteriors_davies2010.csv") %>% 
   mutate(agegroup=factor(agegroup,levels=unique(agegroup)))
@@ -175,7 +170,6 @@ ggplot(susc_clinfract_plot,aes(x=agegroup,y=value,color=type,group=type)) + geom
   theme(axis.text.x=element_text(vjust = 0.5)) + ylab("proportion/normalised value")
 # SAVE
 ggsave("simul_output/somalia/clinfract_susc_lit_approx.png",width=30,height=16,units="cm")
-params$pop[[1]]$y=fun_lin_approx_agedep_par(agegroups=somalia_agegroups_IFR,min_val=0.25,max_val=0.7,rep_min=6,rep_max=2)
 # plot IFR original vs adjusted
 ggplot(cbind(data.frame(age=factor(somalia_agegroups_IFR$agegroup,levels=unique(somalia_agegroups_IFR$agegroup)),
                   literature=IFR_estimates_Sandmann2021$ifr_mean),
@@ -188,13 +182,7 @@ ggplot(cbind(data.frame(age=factor(somalia_agegroups_IFR$agegroup,levels=unique(
         legend.text=element_text(size=15))
 # SAVE
 ggsave("simul_output/somalia/IFR_shifted_logit.png",width=25,height=16,units="cm")
-# change susceptibility to get R0
-# susceptibility estimates from (warwick): 
-# susceptibility_warvick_model <- left_join(read_csv("data/susceptibility_warvick_model.csv") %>% mutate(value=value/max(value)),
-#   fcn_load_age_str("Somalia",n_year="2015",100),by="agegroup") %>% mutate(agegroup_weight=agegroupsize/sum(agegroupsize),
-#   agegroup_min=ifelse(agegroup_min>=75,75,agegroup_min),agegroup_max=ifelse(agegroup_max>=75,100,agegroup_max)) %>% 
-#   group_by(agegroup_min) %>% summarise(agegroup=unique(agegroup)[1],value=sum(value*agegroup_weight/sum(agegroup_weight)),
-#     agegroupsize=sum(agegroupsize),agegroup_min=unique(agegroup_min),agegroup_max=unique(agegroup_max)) %>% arrange(agegroup_min)
+# change susceptibility to get R0=1.8
 target_R0=1.8; params$pop[[1]]$u=c(rep(0.38,4),rep(0.8,12)) # susceptibility_warvick_model$value # 
 params$pop[[1]]$u=params$pop[[1]]$u*(target_R0/cm_calc_R0(params,1))
 # R0: cm_calc_R0(params,1)
@@ -231,24 +219,8 @@ ggplot(subset(covidm_simul,!dynam_type %in% "preval")) + geom_area(aes(x=date,y=
 # ggsave(paste0("simul_output/somalia/agegroups_summed_output_introddate_noninteg.png"),width=30,height=20,units="cm")
 
 # PLOT incident deaths with data
-# out_bdr_daily_estimates %>% select(date,new_graves_best_ipol,daily_baseline_subtr,rollmeanweek)
 fitting_date_window=as.Date(c("2020-01-15","2020-10-01"))
 fcn_covidm_singlesim_error(covidm_simul,introd_day,seedsize = 50,out_bdr_daily_estimates,fitting_date_window)
-###
-# IFR
-# IFR: linear regression -> generate new values
-# IFR_estimates_Sandmann2021 # somalia_agegroups_IFR
-linregr=lm(logit_ifr~agegroup_mean,data=IFR_estimates_Sandmann2021 %>% select(agegroup_mean,logit_ifr) )
-ggplot(IFR_estimates_Sandmann2021 %>% mutate(pred_ifr=
-  inv.logit(linregr$coefficients["(Intercept)"]+linregr$coefficients["agegroup_mean"]*somalia_agegroups_IFR$agegroup_mean),
-  raised_ifr=inv.logit(logit_ifr + 1)) %>% select(agegroup_mean,ifr_mean,pred_ifr,raised_ifr) %>% 
-    rename(`estimate in literature`=ifr_mean,fit=pred_ifr) %>% 
-  pivot_longer(!c(agegroup_mean)),aes(x=agegroup_mean,y=value*1e2,group=name,color=name)) + geom_line(size=1.05) + geom_point(size=2) +
-  theme_bw() + standard_theme + scale_x_continuous(breaks=2.5+(0:16)*5) + labs(color="") + xlab("age (year)") + ylab("IFR %") +
-  theme(axis.text.x=element_text(vjust=0.5,size=12),axis.text.y=element_text(size=12)) +
-  scale_y_log10(breaks=scales::trans_breaks("log10",function(x) 10^x)) # limits=c(1e-4,10^2),
-# ggsave("simul_output/somalia/IFR_consensus_estimate_fit.png",width=15,height=10,units="cm")
-# predicted IFR: exp(-10.8 + 0.1*c(2.5+(0:14)*5,80.255))
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
@@ -300,7 +272,7 @@ ggplot(acled_burial_comparison %>% ungroup() %>% select(date,rollingsum_month_ac
   scale_y_continuous(expand=expansion(0.01,0))
 ggsave("simul_output/somalia/acled_burials_rolling_monthly_sum.png",width=30,height=18,units="cm")
 
-# weekly monthly compare
+# weekly monthly compare (SI Figure 3)
 weekly_acled_burial_comparison = acled_burial_comparison %>% mutate(week=week(date),year=year(date)) %>% group_by(year,week) %>% 
   summarise(date=min(date),fatalities=sum(fatalities),rollingmean_acled=sum(rollingmean_acled),new_graves_best_ipol=sum(new_graves_best_ipol)) %>%
   mutate(year_week=factor(paste0(year,"/",week),levels=unique(paste0(year,"/",week)))) %>% 
@@ -323,9 +295,10 @@ if (any(grepl("Point",class(p$layers[[1]]$geom)))) {plotfilename<-"acled_banadir
 ggsave(paste0("simul_output/somalia/ACLED_data/",plotfilename,".png"),width=30,height=16,units="cm")
 
 # daily compare plot
-ggplot(acled_burial_comparison %>% pivot_longer(!c(admin1,date)) %>% filter(date<=as.Date("2020-10-01")),aes(x=date)) + # geom_line() +
+ggplot(acled_burial_comparison %>% filter(date<=as.Date("2020-10-01")),aes(x=date)) + #  %>% pivot_longer(!c(admin1,date))
   geom_bar(aes(y=fatalities,color="ACLED: daily deaths (armed conflicts/terrorism)"),stat="identity",alpha=0.1) +  
-  geom_line(aes(y=rollingmean,color="ACLED: 7-day average")) + ggtitle("daily burials and deaths in armed conflicts/terror attacks") +
+  geom_line(aes(y=rollingmean_acled,color="ACLED: 7-day average")) + 
+  ggtitle("daily burials and deaths in armed conflicts/terror attacks") +
   geom_line(aes(y=new_graves_best_ipol,color="daily burials")) + scale_color_manual(values=c("red","pink","black")) + 
   scale_x_date(date_breaks="month",expand=expansion(0.001,0)) + scale_y_continuous(breaks=5*(0:20),expand = expansion(0.01,0)) +
   theme_bw() + standard_theme + theme(axis.text.x=element_text(vjust=0.5),legend.position = "bottom")

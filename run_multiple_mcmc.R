@@ -2,13 +2,10 @@
 rm(list=ls()); currentdir_path=dirname(rstudioapi::getSourceEditorContext()$path); setwd(currentdir_path)
 lapply(c("tidyverse","deSolve","qs","gtools","rstudioapi","wpp2019","countrycode","coronavirus","wesanderson","dttr2","RcppRoll",
          "scales","wpp2019","GGally","corrr","ungeviz"), library,character.only=TRUE)
-# detach("package:fitdistrplus", unload = TRUE); detach("package:MASS", unload = TRUE) # "foreach","parallel","doParallel"
 # functions and plotting theme
 source("somalia_data_model_fcns.R")
-N_tot=fun_cntr_agestr("Somalia",i_year="2020",age_groups=data.frame(age_group=c(1:16),
-                                                                    age_low=c(seq(0,75,5)),age_high=c(seq(4,74,5),100)))
 # burial data
-burial_data=read_csv("data/somalia_data/Mogadishu_data/mogadishu_burial_analysis-main/out_bdr_daily_estimates.csv")
+burial_data=read_csv("repo_data/out_bdr_daily_estimates.csv")
 baseline_daily_burials=mean(subset(burial_data,date>="2019-07-01" & date<="2019-11-01")$new_graves_best_ipol)
 # subset for relevant period and columns
 out_bdr_daily_estimates=burial_data[!rowSums(is.na(burial_data))==(ncol(burial_data)-1),
@@ -30,17 +27,17 @@ npi_df=left_join(data.frame(t(data.frame(on_off=c("on","off"),NPI_phases))) %>% 
                    filter(!name=="on_off") %>% rename(on=X1,off=X2) %>% mutate(on=as.Date(on),off=as.Date(off)),
                  data.frame(NPIvals) %>% rownames_to_column(var="name"),by="name") %>% mutate(name=factor(name,levels=unique(name))) %>%
   rename(contact_level=NPIvals) %>% mutate(contact_reduction=1-contact_level)
-### Somalia population, IFR ------------
+# IFR estimates (from: https://www.imperial.ac.uk/mrc-global-infectious-disease-analysis/covid-19/report-34-IFR/)
+data(pop)
 somalia_agegroups_IFR=fcn_merge_ifr_above_age(left_join(fcn_load_age_str("Somalia",n_year="2015",90),
-                                                        fcn_load_ifr("data/IFR_by_age_imperial.csv"),by=c("agegroup","agegroup_min")),75) %>% 
+          fcn_load_ifr("repo_data/IFR_by_age_imperial.csv"),by=c("agegroup","agegroup_min")),75) %>% 
   mutate(ifr_mean=ifelse(ifr_mean==0,min(ifr_mean[ifr_mean>0]),ifr_mean),log_ifr=log(ifr_mean),logit_ifr=log(ifr_mean/(1-ifr_mean)))
-somal_popul_tot=sum(somalia_agegroups_IFR$agegroupsize); mogadishu_popul=2.2e6 # somalia_agegroups_IFR$ifr_mean[1]=3e-6; 
 # IFR estimates from Sandmann 2021 cmmid paper
-IFR_estimates_Sandmann2021 <- read_csv("data/IFR_estimates_Sandmann2021.csv")
+IFR_estimates_Sandmann2021 <- read_csv("repo_data/IFR_estimates_Sandmann2021.csv")
 if (any(IFR_estimates_Sandmann2021$value_percent>1)) {n_cols<-2:ncol(IFR_estimates_Sandmann2021)
 IFR_estimates_Sandmann2021[,n_cols]<-IFR_estimates_Sandmann2021[,n_cols]/1e2
 IFR_estimates_Sandmann2021 <- left_join(IFR_estimates_Sandmann2021 %>% rename(agegroup=Age,ifr_mean=value_percent), 
-          somalia_agegroups_IFR %>% select(!c(ifr_mean,log_ifr,logit_ifr)),by="agegroup") %>% mutate(logit_ifr=log(ifr_mean/(1-ifr_mean))) }
+    somalia_agegroups_IFR %>% select(!c(ifr_mean,log_ifr,logit_ifr)),by="agegroup") %>% mutate(logit_ifr=log(ifr_mean/(1-ifr_mean))) }
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 # COVIDM
 cm_path="~/Desktop/research/models/epid_models/covid_model/lmic_model/covidm/"
@@ -51,12 +48,16 @@ countryval="Somalia"; params=cm_parameters_SEI3R(gsub("Sudan|Somalia","Ethiopia"
 params$pop[[1]]$name=countryval
 params$pop[[1]]$size=somalia_agegroups_IFR$agegroupsize*(mogadishu_popul/sum(somalia_agegroups_IFR$agegroupsize))
 params$pop[[1]]$dist_seed_ages=cm_age_coefficients(20,30,5*(0:length(params$pop[[1]]$size)))
-
+# set clinical fraction values (from Davies 2020 -> "repo_data/suscept_clinfract_posteriors_davies2010.csv")
+# set approximated clin fract values
+params$pop[[1]]$y=fun_lin_approx_agedep_par(agegroups=somalia_agegroups_IFR,min_val=0.25,max_val=0.7,rep_min=6,rep_max=2)
 ###
 # multiple mcmc fits
 fitting_params <- c("R0_fit","introd_date","npi_scale") # "seed_size","compliance"
 ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+# functions for MCMC fitting
+# pf handles fitting parameters
 pf <- function(parameters, x){x=as.list(x); n_groups=length(parameters$pop[[1]]$size)
 # R0
 target_R0=2; parameters$pop[[1]]$u=c(rep(0.0145,4),rep(0.0305,12))*(x$R0_fit/target_R0) #  # cm_calc_R0(params,1)
@@ -82,6 +83,7 @@ for (k in 1:length(npi_vals)) { if (k==1) {iv=cm_iv_build(parameters)}
 return (parameters) 
 }
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+# calculating posterior likelihood by a Poisson
 likelihood = function(parameters, dynamics, data, x){
   inc = data; inc[, t := as.numeric(date - ymd(parameters$date0))]
   # simulations output scaled!!!
@@ -90,28 +92,33 @@ likelihood = function(parameters, dynamics, data, x){
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 # priors
-priors=list(R0_fit="N 3 1 T 0.5 5.5", introd_date="N 182 20",npi_scale="U 0 1") # ,compliance="U 0 1" # ifr_logit_intercept="N -10.8 2"
+priors=list(R0_fit="N 3 1 T 1 5", introd_date="N 182 20",npi_scale="U 0 1") # ,compliance="U 0 1" # ifr_logit_intercept="N -10.8 2"
 ### ### ### ### ### ### ### ###
-# check data
-ggplot(fitting_incidence_modelcompare %>% filter(date>as.Date("2020-01-15")&date<as.Date("2020-06-20")) %>%
-         select(date,new_deaths) %>% pivot_longer(!date),aes(x=date,y=value)) + geom_line() + geom_point() +
+# PERIOD we are fitting
+fitting_date_window=as.Date(c("2020-02-23","2020-08-24")) # c("2020-01-15","2020-04-13") # c("2020-01-15","2020-10-01")
+# select fitting data
+fitting_incidence <- data.table(out_bdr_daily_estimates %>% select(date,daily_baseline_subtr) %>% 
+                                  mutate(daily_baseline_subtr=round(daily_baseline_subtr))) %>%
+  filter(date>=fitting_date_window[1] & date<=fitting_date_window[2]) %>% rename(new_deaths=daily_baseline_subtr)
+# plot
+ggplot(fitting_incidence,aes(x=date,y=new_deaths)) + geom_line() + geom_point() +
   theme_bw() + scale_x_date(date_breaks="2 days",expand=expansion(0,0)) + standard_theme +
   theme(axis.text.x=element_text(vjust=0.5),legend.position="top") + 
   geom_vline(xintercept=as.Date("2020-04-13"),linetype="dashed",size=0.4)
-# PERIOD we are fitting
-fitting_date_window=as.Date(c("2020-01-15","2020-04-13")) #  # c("2020-02-23","2020-08-24") # c("2020-01-15","2020-10-01")
 # n_compliance,n_seedsize
 ### ### ### ### ### ### ### ###
 parscan_dirname=paste0("simul_output/somalia/scan_seedsize_ifr_",
                        gsub(" ","_",paste0(paste0(gsub("_","",names(priors)[2]),"_",unlist(priors)[2],""),collapse="_")),
                        "_fitperiod_",paste0(gsub("-","",fitting_date_window),collapse = "_"))
 if (!dir.exists(parscan_dirname)) {dir.create(parscan_dirname); print("created dir")} else {print("dir exists")}
-CDR_vals=c(1e4*baseline_daily_burials/mogadishu_popul,0.1,0.2,0.4)[1] 
-# check start date for simuls
-params$date0="2019-11-01" # round(10^((2:5)/2))
+mogadishu_popul=2.2e6; CDR_vals=c(1e4*baseline_daily_burials/mogadishu_popul,0.1,0.2,0.4)[1] 
+# start date for simulations
+params$date0="2019-11-01"
+# select range of seed sizes
 scan_seed_vals=10 # c(20,50,100,200,500)
+# select range of IFR values
 ifr_increm_vals=c(0,1,2) # scan_compliance_vals=c(0,0.25,0.5)
-fits_death_scaling=list(); fits_compliance=list() # fits_all=list()
+fits_death_scaling=list(); fits_compliance=list()
 # fcn_somal_sir_singlesimul<-.GlobalEnv$fcn_somal_sir_singlesimul
 # df_output <- foreach(k=1:k_lim,.combine=rbind,.packages=c("tidyr","deSolve","dplyr","RcppRoll")) %dopar% { }
 for (n_seedsize in scan_seed_vals) {

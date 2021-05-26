@@ -1,11 +1,45 @@
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### multiple fits with fixed seed size and compliance levels
+rm(list=ls()); currentdir_path=dirname(rstudioapi::getSourceEditorContext()$path); setwd(currentdir_path)
+lapply(c("tidyverse","deSolve","qs","gtools","rstudioapi","wpp2019","countrycode","coronavirus","wesanderson","dttr2","RcppRoll",
+         "scales","wpp2019","GGally","corrr","ungeviz"), library,character.only=TRUE)
+# functions and plotting theme
+source("somalia_data_model_fcns.R")
+# load folder (change to "repo_data" or own folder)
 parscan_mcmc_dirname=
   "simul_output/somalia/3param_fits_seedsize_IFR_fixed/scan_seedsize_ifr_introddate_N_182_20_fitperiod_20200223_20200824/"
 parfit_scan_files<-list.files(parscan_mcmc_dirname,pattern = ".rds"); # slope_val=round(as.numeric(linregr$coefficients[2]),4)
 # need to have IFR estimates from Sandmann: IFR_estimates_Sandmann2021$logit_ifr
 # how many CDR values were used?
 onefit=readRDS(paste0(parscan_mcmc_dirname,parfit_scan_files[1]))[[1]]; x_dodge_val=0.6; fitting_params <- names(onefit$priors)
+scan_params<-c("seedsize","ifr_logit_increm","IFR all infections (%)")
+# load burial data
+burial_data=read_csv("repo_data/out_bdr_daily_estimates.csv")
+baseline_daily_burials=mean(subset(burial_data,date>="2019-07-01" & date<="2019-11-01")$new_graves_best_ipol)
+out_bdr_daily_estimates=burial_data[!rowSums(is.na(burial_data))==(ncol(burial_data)-1),
+                                    !colSums(is.na(burial_data))==nrow(burial_data)] %>% filter(date>"2019-11-01") %>%
+  mutate(daily_baseline_subtr=ifelse(new_graves_best_ipol-baseline_daily_burials>0,
+                                     new_graves_best_ipol-baseline_daily_burials,0),
+         rollmeanweek=roll_mean(daily_baseline_subtr,7,align="center", fill=NA), # rolling mean BASELINE subtracted
+         rollsumweek=roll_sum(daily_baseline_subtr,7,align="left",fill=NA),
+         rollmeanweek_no_subtr=roll_mean(new_graves_best_ipol,7,align="center", fill=NA),
+         rollsumweek_no_subtr=roll_sum(new_graves_best_ipol,7,align="left",fill=NA))
+# CDR (crude death rate) value: fitting only with estimate from data
+mogadishu_popul=2.2e6
+CDR_vals=c(baseline_daily_burials*1e4/mogadishu_popul,0.1,0.2,0.4)[1:length(readRDS(paste0(parscan_mcmc_dirname,parfit_scan_files[1])))]
+# load IFR
+data(pop)
+somalia_agegroups_IFR=fcn_merge_ifr_above_age(left_join(fcn_load_age_str("Somalia",n_year="2015",90),
+   fcn_load_ifr("repo_data/IFR_by_age_imperial.csv"),by=c("agegroup","agegroup_min")),75) %>% 
+  mutate(ifr_mean=ifelse(ifr_mean==0,min(ifr_mean[ifr_mean>0]),ifr_mean),log_ifr=log(ifr_mean),logit_ifr=log(ifr_mean/(1-ifr_mean)))
+# from Sandmann 2021 cmmid paper
+IFR_estimates_Sandmann2021<-read_csv("repo_data/IFR_estimates_Sandmann2021.csv")
+if (any(IFR_estimates_Sandmann2021$value_percent>1)) {n_cols<-2:ncol(IFR_estimates_Sandmann2021)
+IFR_estimates_Sandmann2021[,n_cols]<-IFR_estimates_Sandmann2021[,n_cols]/1e2; 
+IFR_estimates_Sandmann2021 <- left_join(IFR_estimates_Sandmann2021 %>% rename(agegroup=Age,ifr_mean=value_percent), 
+   somalia_agegroups_IFR %>% select(!c(ifr_mean,log_ifr,logit_ifr)),by="agegroup") %>% mutate(logit_ifr=log(ifr_mean/(1-ifr_mean)))
+}
+# scan parameters
 scan_params<-c("seedsize","ifr_logit_increm","IFR all infections (%)")
 CDR_vals=c(baseline_daily_burials*1e4/mogadishu_popul,0.1,0.2,0.4)[1:length(readRDS(paste0(parscan_mcmc_dirname,parfit_scan_files[1])))]
 for (k in 1:length(parfit_scan_files)) {

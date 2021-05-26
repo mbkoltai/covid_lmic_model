@@ -1,7 +1,5 @@
 ## Model fitting satellite-based excess mortality data in Mogadishu, Somalia
 
-(*repo under construction/cleanup*)
-
 ### Contact
 
 Mihaly Koltai  

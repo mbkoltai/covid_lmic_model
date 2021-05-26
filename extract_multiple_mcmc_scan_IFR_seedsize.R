@@ -57,7 +57,7 @@ summ = dyn_all %>% group_by(t,run,compartment,CDR,ifr_logit_increm,seedsize) %>%
   group_by(run,compartment,CDR,ifr_logit_increm,seedsize) %>%
   mutate(value=ifelse(compartment %in% "S",(value[t==0]-value)/value[t==0],value),
           compartment=ifelse(compartment %in% "S","attack_rate",as.character(compartment))) %>%
-  group_by(t,compartment,CDR,ifr_logit_increm,seedsize) %>% summarise(lower=hdi(value)[[1]],upper=hdi(value)[[2]],mean=mean(value) ) %>% 
+  group_by(t,compartment,CDR,ifr_logit_increm,seedsize) %>% summarise(lower=hdi(value)[[1]],upper=hdi(value)[[2]],mean=mean(value)) %>%
   mutate(date=as.Date(seq(as.Date(fits_death_scaling[[1]]$base_parameters$date0),
                           as.Date(fits_death_scaling[[1]]$base_parameters$date0)+max(t),1)[t+1]),CDR=round(CDR,5),
          lower=lower*(round(CDR_vals[1],5)/CDR),upper=upper*(round(CDR_vals[1],5)/CDR),mean=mean*(round(CDR_vals[1],5)/CDR)) %>%
@@ -211,20 +211,23 @@ ggsave(paste0(parscan_mcmc_dirname,"all_dynamic_fits_NPIcolorcode.png"),width=36
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 # PLOT DIC as function of CDR~seedsize~ifr NPI_scale
-label_y_dodge=10; label_y_factor=1.03; fontsize=3.5
+label_y_dodge=12; label_y_factor=1.03; fontsize=4.5
 ggplot(fitting_params_best_estim %>% filter(ifr_all_inf<1.6 & seedsize>20) %>% 
          mutate(R0_label=paste0("R0=",round(R0_fit,1)),npi_max_effect=npi_scale*max(npi_df$contact_reduction)) ) + 
-  geom_hpline(aes(x=factor(ifr_all_inf),y=DIC,group=seedsize,color=factor(seedsize)),width=0.22, # group=CDR,alpha=factor(CDR)
+  geom_hpline(aes(x=factor(ifr_all_inf),y=DIC,group=seedsize,color=factor(seedsize)),width=0.24, # group=CDR,alpha=factor(CDR)
               position=position_dodge(width=1)) + scale_alpha_manual(values=c(0.4,0.55,0.7,0.85)) + 
   geom_vline(xintercept=(2:4)-0.5,size=0.2,linetype="dashed") + # facet_wrap(~seedsize,labeller=labeller(CDR=label_both),nrow = 3) +
   scale_x_discrete(expand=expansion(0.1,0)) + # scale_y_log10() + # scale_y_continuous(breaks=seq(5,100,by=1)*100) + 
   theme_bw() + standard_theme + 
   theme(axis.text.x=element_text(vjust=0.5,hjust=0.95,size=12),axis.text.y=element_text(size=12),panel.grid.major.x=element_blank(),
         legend.position="top",strip.text=element_text(size=15)) +
+  # introd date
   geom_text(aes(x=factor(ifr_all_inf),y=DIC+label_y_dodge,
-                group=seedsize,label=paste0(gsub("2019/|2020/","",gsub("-","/",introd_date)),",",R0_label)), # group=CDR
+     group=seedsize,label=paste0(gsub("2019/|2020/","'",gsub("-","/",introd_date)))),position=position_dodge(width=1),size=fontsize) +
+  # R0
+  geom_text(aes(x=factor(ifr_all_inf),y=DIC+label_y_dodge+14,group=seedsize,label=R0_label),
             position=position_dodge(width=1),size=fontsize) + 
-  geom_text(aes(x=factor(ifr_all_inf),y=DIC-label_y_dodge,group=seedsize,label=paste0("NPI_eff:",round(npi_max_effect*100),"%")),
+  geom_text(aes(x=factor(ifr_all_inf),y=DIC-label_y_dodge,group=seedsize,label=paste0("NPI: ",round(npi_max_effect*100),"%")),
             position=position_dodge(width=1),size=fontsize) + xlab("IFR (%)") + ylab("DIC") + labs(color="seedsize",alpha="CDR")
 # caption="Introd. date not shown when equal to 2019-11-11"
 # SAVE

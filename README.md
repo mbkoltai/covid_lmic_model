@@ -1,4 +1,4 @@
-## Model fitting satellite-based excess mortality data in Mogadishu, Somalia
+## Fitting satellite-based excess mortality data from Mogadishu (Somalia) Jan-Oct/2020
 
 ### Contact
 

@@ -39,7 +39,34 @@ IFR_estimates_Sandmann2021[,n_cols]<-IFR_estimates_Sandmann2021[,n_cols]/1e2;
 IFR_estimates_Sandmann2021 <- left_join(IFR_estimates_Sandmann2021 %>% rename(agegroup=Age,ifr_mean=value_percent), 
    somalia_agegroups_IFR %>% select(!c(ifr_mean,log_ifr,logit_ifr)),by="agegroup") %>% mutate(logit_ifr=log(ifr_mean/(1-ifr_mean)))
 }
-# scan parameters
+### ### ### ### ### ### ### ### ### ### 
+# read in NPI data Oxford Stringency Index
+# truncate until a given timepoint
+OxCGRT_url="https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv"
+OxCGRT_input=fcn_get_OxCGRT(OxCGRT_url,"Somalia") %>% mutate(OxCGRT_scaled_smoothed=roll_mean(OxCGRT_scaled,30,align="center",fill=NA))
+# separate into 4 phases
+NPI_phases=list(first=c("2020-03-19","2020-06-30"),second=c("2020-07-01","2020-08-29"),
+                third=c("2020-08-30","2020-10-08"),fourth=c("2020-10-09","2020-11-01"))
+NPIvals=sapply(NPI_phases,function(x) mean(OxCGRT_input$OxCGRT_scaled[OxCGRT_input$date>as.Date(x)[1]&OxCGRT_input$date<as.Date(x)[2]]))
+npi_df=left_join(data.frame(t(data.frame(on_off=c("on","off"),NPI_phases))) %>% add_rownames(var="name") %>% 
+                   filter(!name=="on_off") %>% rename(on=X1,off=X2) %>% mutate(on=as.Date(on),off=as.Date(off)),
+                 data.frame(NPIvals) %>% rownames_to_column(var="name"),by="name") %>% mutate(name=factor(name,levels=unique(name))) %>%
+  rename(contact_level=NPIvals) %>% mutate(contact_reduction=1-contact_level)
+### ### ###
+# load COVIDM parameters
+cm_path="~/Desktop/research/models/epid_models/covid_model/lmic_model/covidm/"
+cm_force_rebuild=F; cm_build_verbose=T; cm_version=1; source(file.path(cm_path,"R","covidm.R"))
+countryval="Somalia"; params=cm_parameters_SEI3R(gsub("Sudan|Somalia","Ethiopia",countryval),
+                                                 date_start="2019-11-01",date_end="2020-10-01")
+# set population: Somalia --> Mogadishu
+params$pop[[1]]$name=countryval
+params$pop[[1]]$size=somalia_agegroups_IFR$agegroupsize*(mogadishu_popul/sum(somalia_agegroups_IFR$agegroupsize))
+params$pop[[1]]$dist_seed_ages=cm_age_coefficients(20,30,5*(0:length(params$pop[[1]]$size)))
+# set clinical fraction values (from Davies 2020 -> "repo_data/suscept_clinfract_posteriors_davies2010.csv")
+# set approximated clin fract values
+params$pop[[1]]$y=fun_lin_approx_agedep_par(agegroups=somalia_agegroups_IFR,min_val=0.25,max_val=0.7,rep_min=6,rep_max=2)
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+# read in results of fitting
 scan_params<-c("seedsize","ifr_logit_increm","IFR all infections (%)")
 CDR_vals=c(baseline_daily_burials*1e4/mogadishu_popul,0.1,0.2,0.4)[1:length(readRDS(paste0(parscan_mcmc_dirname,parfit_scan_files[1])))]
 for (k in 1:length(parfit_scan_files)) {
@@ -270,7 +297,8 @@ ggsave(paste0(parscan_mcmc_dirname,"DIC_xaxis_NPIscaling_colorcode_seedsize_alph
 ### ### ### ### ### ### ###
 # PLOT facet_grid NAME-NPI, x-axis CDR, color coded by SEEDSIZE
 df_summary_plot=left_join(posteriors_summary_stats %>% filter(!name %in% "CDR") %>% group_by(name) %>% 
-      mutate(name=ifelse(name=="R0_fit","R0",name), median_range=max(median)-min(median)),DIC_logllk_values %>% select(!c(maxval,deviance,d_p)),
+      mutate(name=ifelse(name=="R0_fit","R0",name), median_range=max(median)-min(median)),
+      DIC_logllk_values %>% select(!c(maxval,deviance,d_p)),
       by=c("seedsize","ifr_logit_increm")) %>% filter(!name %in% c("ifr_logit_intercept","IFR sympt. infections (%)")) %>% 
   mutate(DIC_str=paste0(round(DIC/10^floor(log10(DIC)),2),"e",floor(log10(DIC)))) %>%
   mutate(ifr_all_inf=round(sapply(ifr_logit_increm,

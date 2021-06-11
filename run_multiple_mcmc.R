@@ -45,7 +45,7 @@ cm_force_rebuild=F; cm_build_verbose=T; cm_version=1; source(file.path(cm_path,"
 countryval="Somalia"; params=cm_parameters_SEI3R(gsub("Sudan|Somalia","Ethiopia",countryval),
                                                  date_start="2019-11-01",date_end="2020-10-01")
 # set population: Somalia --> Mogadishu
-params$pop[[1]]$name=countryval
+params$pop[[1]]$name=countryval; mogadishu_popul=2.2e6
 params$pop[[1]]$size=somalia_agegroups_IFR$agegroupsize*(mogadishu_popul/sum(somalia_agegroups_IFR$agegroupsize))
 params$pop[[1]]$dist_seed_ages=cm_age_coefficients(20,30,5*(0:length(params$pop[[1]]$size)))
 # set clinical fraction values (from Davies 2020 -> "repo_data/suscept_clinfract_posteriors_davies2010.csv")
@@ -111,7 +111,7 @@ parscan_dirname=paste0("simul_output/somalia/scan_seedsize_ifr_",
                        gsub(" ","_",paste0(paste0(gsub("_","",names(priors)[2]),"_",unlist(priors)[2],""),collapse="_")),
                        "_fitperiod_",paste0(gsub("-","",fitting_date_window),collapse = "_"))
 if (!dir.exists(parscan_dirname)) {dir.create(parscan_dirname); print("created dir")} else {print("dir exists")}
-mogadishu_popul=2.2e6; CDR_vals=c(1e4*baseline_daily_burials/mogadishu_popul,0.1,0.2,0.4)[1] 
+CDR_vals=c(1e4*baseline_daily_burials/mogadishu_popul,0.1,0.2,0.4)[1] 
 # start date for simulations
 params$date0="2019-11-01"
 # select range of seed sizes

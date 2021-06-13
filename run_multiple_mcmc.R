@@ -23,7 +23,7 @@ OxCGRT_input=fcn_get_OxCGRT(OxCGRT_url,"Somalia") %>% mutate(OxCGRT_scaled_smoot
 NPI_phases=list(first=c("2020-03-19","2020-06-30"),second=c("2020-07-01","2020-08-29"),
                 third=c("2020-08-30","2020-10-08"),fourth=c("2020-10-09","2020-11-01"))
 NPIvals=sapply(NPI_phases,function(x) mean(OxCGRT_input$OxCGRT_scaled[OxCGRT_input$date>as.Date(x)[1]&OxCGRT_input$date<as.Date(x)[2]]))
-npi_df=left_join(data.frame(t(data.frame(on_off=c("on","off"),NPI_phases))) %>% add_rownames(var="name") %>% 
+npi_df=left_join(data.frame(t(data.frame(on_off=c("on","off"),NPI_phases))) %>% rownames_to_column(var="name") %>% 
                    filter(!name=="on_off") %>% rename(on=X1,off=X2) %>% mutate(on=as.Date(on),off=as.Date(off)),
                  data.frame(NPIvals) %>% rownames_to_column(var="name"),by="name") %>% mutate(name=factor(name,levels=unique(name))) %>%
   rename(contact_level=NPIvals) %>% mutate(contact_reduction=1-contact_level)
@@ -47,7 +47,7 @@ countryval="Somalia"; params=cm_parameters_SEI3R(gsub("Sudan|Somalia","Ethiopia"
 # set population: Somalia --> Mogadishu
 params$pop[[1]]$name=countryval; mogadishu_popul=2.2e6
 params$pop[[1]]$size=somalia_agegroups_IFR$agegroupsize*(mogadishu_popul/sum(somalia_agegroups_IFR$agegroupsize))
-params$pop[[1]]$dist_seed_ages=cm_age_coefficients(20,30,5*(0:length(params$pop[[1]]$size)))
+params$pop[[1]]$dist_seed_ages=cm_age_coefficients(30,70,5*(0:length(params$pop[[1]]$size)))
 # set clinical fraction values (from Davies 2020 -> "repo_data/suscept_clinfract_posteriors_davies2010.csv")
 # set approximated clin fract values
 params$pop[[1]]$y=fun_lin_approx_agedep_par(agegroups=somalia_agegroups_IFR,min_val=0.25,max_val=0.7,rep_min=6,rep_max=2)
@@ -92,7 +92,7 @@ likelihood = function(parameters, dynamics, data, x){
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 # priors
-priors=list(R0_fit="N 3 1 T 1 5", introd_date="N 182 20",npi_scale="U 0 1") # ,compliance="U 0 1" # ifr_logit_intercept="N -10.8 2"
+priors=list(R0_fit="N 3 1 T 1 5", introd_date="N 182 20",npi_scale="U 0 1")
 ### ### ### ### ### ### ### ###
 # PERIOD we are fitting
 fitting_date_window=as.Date(c("2020-02-23","2020-08-24")) # c("2020-01-15","2020-04-13") # c("2020-01-15","2020-10-01")
@@ -103,8 +103,7 @@ fitting_incidence <- data.table(out_bdr_daily_estimates %>% select(date,daily_ba
 # plot
 ggplot(fitting_incidence,aes(x=date,y=new_deaths)) + geom_line() + geom_point() +
   theme_bw() + scale_x_date(date_breaks="2 days",expand=expansion(0,0)) + standard_theme +
-  theme(axis.text.x=element_text(vjust=0.5),legend.position="top") + 
-  geom_vline(xintercept=as.Date("2020-04-13"),linetype="dashed",size=0.4)
+  theme(axis.text.x=element_text(vjust=0.5),legend.position="top") # + geom_vline(xintercept=as.Date("2020-04-13"),size=0.4)
 # n_compliance,n_seedsize
 ### ### ### ### ### ### ### ###
 parscan_dirname=paste0("simul_output/somalia/scan_seedsize_ifr_",
@@ -113,11 +112,11 @@ parscan_dirname=paste0("simul_output/somalia/scan_seedsize_ifr_",
 if (!dir.exists(parscan_dirname)) {dir.create(parscan_dirname); print("created dir")} else {print("dir exists")}
 CDR_vals=c(1e4*baseline_daily_burials/mogadishu_popul,0.1,0.2,0.4)[1] 
 # start date for simulations
-params$date0="2019-11-01"
+params$date0="2019-09-01"
 # select range of seed sizes
-scan_seed_vals=10 # c(20,50,100,200,500)
+scan_seed_vals=c(20,50,100,200,500)
 # select range of IFR values
-ifr_increm_vals=c(0,1,2) # scan_compliance_vals=c(0,0.25,0.5)
+ifr_increm_vals=c(2.5) # c(0,1,2,2.5,3)
 fits_death_scaling=list(); fits_compliance=list()
 # fcn_somal_sir_singlesimul<-.GlobalEnv$fcn_somal_sir_singlesimul
 # df_output <- foreach(k=1:k_lim,.combine=rbind,.packages=c("tidyr","deSolve","dplyr","RcppRoll")) %dopar% { }
@@ -131,7 +130,7 @@ for (n_seedsize in scan_seed_vals) {
       ### fitting -------------------
       print(paste0("#### fitting to CDR=",round(CDR_vals[k],3),"##, ifr_logit increm=",ifr_logit_increm," ### seedsize=",n_seedsize," ##"))
       fits_death_scaling[[k]]=cm_fit(base_parameters=params, priors=priors, parameters_func=pf, likelihood_func=likelihood,
-                                     data=fitting_incidence, mcmc_burn_in=5e2, mcmc_samples=2e3, mcmc_init_opt=F, opt_maxeval=25 )
+                          data=fitting_incidence, mcmc_burn_in=5e2, mcmc_samples=2e3, mcmc_init_opt=F, opt_maxeval=25 )
       if (k==length(CDR_vals)) {
         saveRDS(fits_death_scaling, paste0(parscan_dirname,"/fits_death_",paste0(fitting_date_window,collapse = "_"),
                                            "_ifr_increm",ifr_logit_increm,"_seedsize",n_seedsize,".rds") )}

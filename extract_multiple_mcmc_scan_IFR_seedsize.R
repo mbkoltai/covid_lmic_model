@@ -143,7 +143,7 @@ DIC_logllk_values <- left_join(right_join(summ %>% filter(compartment=="death_o"
           function(x) 1e2*sum(inv.logit(IFR_estimates_Sandmann2021$logit_ifr+x)*somalia_agegroups_IFR$agegroup_perc)),2) )
 # contact_red=round(max(npi_df$contact_reduction)*npi,2)
 
-### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### correlations between parameters
 for (k_seedsize in unique(df_posteriors_parscan$seedsize)) {
   for (k_ifr_logit in unique(df_posteriors_parscan$ifr_logit_increm)) {
@@ -209,7 +209,8 @@ for (k in 4:6){
  ggsave(paste0(parscan_mcmc_dirname,"mcmc_diagnostics/logpost_",colnames(df_posteriors_parscan)[k],".png"),width=30,height=18,units="cm")
 }
 
-### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+#####
 # PLOT DYNAMIC fits faceted by (CDR-seedsize-NPI_scale)
 fitting_dates=fits_death_scaling[[1]]$data %>% summarise(min_date=min(date),max_date=max(date))
 ggplot(summ %>% filter(compartment=="death_o")) + 
@@ -295,11 +296,12 @@ ggsave(paste0(parscan_mcmc_dirname,"DIC_xaxis_NPIscaling_colorcode_seedsize_alph
 
 ### ### ### ### ### ### ###
 # PLOT facet_grid NAME-NPI, x-axis CDR, color coded by SEEDSIZE
+round_prec=1
 df_summary_plot=left_join(posteriors_summary_stats %>% filter(!name %in% "CDR") %>% group_by(name) %>% 
       mutate(name=ifelse(name=="R0_fit","R0",name), median_range=max(median)-min(median)),
       DIC_logllk_values %>% select(!c(maxval,deviance,d_p)),
       by=c("seedsize","ifr_logit_increm")) %>% filter(!name %in% c("ifr_logit_intercept","IFR sympt. infections (%)")) %>% 
-  mutate(DIC_str=paste0(round(DIC/10^floor(log10(DIC)),2),"e",floor(log10(DIC)))) %>%
+  mutate(DIC_str=paste0(round(DIC/10^floor(log10(DIC)),round_prec),"e",floor(log10(DIC)))) %>%
   mutate(ifr_all_inf=round(sapply(ifr_logit_increm,
                 function(x) 1e2*sum(inv.logit(IFR_estimates_Sandmann2021$logit_ifr+x)*somalia_agegroups_IFR$agegroup_perc)),2) )
 # plot
@@ -308,21 +310,24 @@ p<-ggplot(df_summary_plot %>% filter(ifr_all_inf<1.6 & seedsize>20),aes(x=factor
   geom_linerange(aes(ymin=ci95_low,ymax=ci95_up,color=factor(seedsize)),position=position_dodge(width=x_dodge_val),alpha=0.3,
                  size=hpline_val,show.legend=FALSE) +
   geom_linerange(aes(ymin=ci50_low,ymax=ci50_up,color=factor(seedsize)),position=position_dodge(width=x_dodge_val),alpha=0.6,
-                 size=hpline_val,show.legend=FALSE) +
-  geom_hpline(aes(y=median,color=factor(seedsize)),position=position_dodge(width=x_dodge_val),width=0.23,size=0.6) +
+                 size=hpline_val) + # ,show.legend=FALSE
+  geom_hpline(aes(y=median),color="black",position=position_dodge(width=x_dodge_val),width=0.23,size=0.6) + # factor(seedsize)
   facet_wrap(~name,scales="free",labeller=labeller(ifr_all_inf=label_both),nrow=3) + # ~NPI_scale
   geom_vline(xintercept=0.5+1:3,size=0.2,linetype="dashed") + theme_bw() + standard_theme + xlab("IFR (%)") + 
   ylab("median (CI50, CI95)") + labs(color="seedsize",caption=paste0("Burn-in: ",onefit$options$mcmc_burn_in,", Samples: ",
               onefit$options$mcmc_samples," (MCMC)")) + scale_x_discrete(expand=expansion(0,0.5)) +
   theme(axis.text.x=element_text(vjust=0.5,hjust=0.95,size=12),axis.text.y=element_text(size=12),panel.grid.major.x=element_blank(),
-        legend.position="top",strip.text=element_text(size=15)) +
+        legend.position="top",strip.text=element_text(size=15),legend.key.height=unit(0.8,'cm')) + # 
+  guides(colour = guide_legend(override.aes=list(size=3))) +
   geom_text(aes(x=factor(ifr_all_inf),y=ifelse(!grepl("introd",name),NA,ci50_up+10),label=ifelse(!grepl("introd",name),"",
-                paste0("DIC=",DIC_str))),size=4,position=position_dodge(width=x_dodge_val)) +
+                paste0("DIC=",DIC_str))),size=4.5,position=position_dodge(width=x_dodge_val)) +
   geom_text(aes(x=factor(ifr_all_inf),y=ifelse(!grepl("introd",name),NA,ci50_low-10),label=ifelse(!grepl("introd",name),"",
-   gsub("^20","'",gsub("-","/",as.Date(onefit$base_parameters$date0)+median)))),size=4,position=position_dodge(width=x_dodge_val)); p
+   gsub("^20","",gsub("-","/",format(as.Date(onefit$base_parameters$date0)+median,"%d/%m/%y"))))),size=4.5,
+   position=position_dodge(width=x_dodge_val)); p
 # SAVE
 ggsave(paste0(parscan_mcmc_dirname,"posteriors_mean_CIs_facet",ifelse(grepl("Wrap",class(p$facet)[1]),"wrap","grid"),
-              "_name_NPIscale_colorcode_seedsize",".png"),width=36,height=30,units="cm") # 2019/|2020/### ### ### ### ###
+              "_name_NPIscale_colorcode_seedsize",".png"),width=36,height=30,units="cm")
+### ### ### ### ###
 # plot attack rates
 p <- ggplot(summ %>% filter(compartment=="attack_rate")) + 
   geom_line(aes(x=date,y=mean,color=factor(ifr_all_inf),alpha=factor(seedsize)),size=1.2) + 
@@ -342,20 +347,21 @@ ggsave(att_rate_filename,width=22,height=16,units="cm")
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 # case dynamics
-ggplot(left_join(summ %>% filter(compartment %in% c("cases","death_o") & date<as.Date("2020-10-01")),
-  fitting_params_best_estim %>% select(seedsize,ifr_logit_increm,R0_fit),by=c("seedsize","ifr_logit_increm")) %>% filter(seedsize<500))+
-  geom_line(aes(x=date,y=mean,color=factor(ifr_all_inf), linetype=compartment,alpha=factor(seedsize)),size=1.2) + # 
-  # geom_ribbon(aes(x=date,ymin=lower,ymax=upper,fill=factor(ifr_all_inf),linetype=compartment),alpha=0.2) + 
+ggplot(left_join(summ %>% filter(compartment %in% c("cases","death_o") & date<as.Date("2020-10-01")), fitting_params_best_estim %>% 
+  select(seedsize,ifr_logit_increm,R0_fit),by=c("seedsize","ifr_logit_increm")) %>% filter(ifr_all_inf==0.36)) +
+  # %>% filter(seedsize<500)
+  geom_line(aes(x=date,y=mean,color=factor(seedsize), linetype=compartment),size=1.2) + # ,alpha=factor(seedsize)
+  geom_ribbon(aes(x=date,ymin=lower,ymax=upper,fill=factor(seedsize),color=factor(seedsize),linetype=compartment),alpha=0.2,size=0.4) + 
   geom_point(data=fitting_incidence_modelcompare,aes(x=date,y=new_deaths),fill=NA,shape=1,size=1) +
   geom_line(data=fitting_incidence_modelcompare,aes(x=date,y=new_deaths),linetype="dashed",color="black",size=0.2) +
-  scale_alpha_manual(values=c(0.4,0.5,0.6,0.7,0.8)) + # facet_wrap(~seedsize,scales = "free") + 
-  standard_theme + theme_bw() + xlab("") + ylab("cases") + 
+# facet_wrap(~ifr_all_inf,scales="free",labeller=labeller(ifr_all_inf=label_both)) + scale_alpha_manual(values=c(0.4,0.5,0.6,0.7,0.8)) +
+  standard_theme + theme_bw() + xlab("") + ylab("cases/deaths") + 
   theme(axis.text=element_text(size=13),axis.text.x=element_text(vjust=0.5,angle=90),panel.grid.minor=element_blank(),
         axis.title=element_text(size=15),strip.text = element_text(size=15),legend.text=element_text(size=15)) +#legend.position="top",
   scale_x_date(date_breaks="2 week",expand=expansion(0.0)) + # ,limits=as.Date(c("2019-10-01","2020-01-01")
-  scale_y_log10(expand=expansion(0,0),limits=c(0.6,1.5e4)) + labs(color="IFR (%)",fill="IFR (%)",alpha="seedsize") +
-  geom_vline(data=npi_df,aes(xintercept=on),linetype="dashed",show.legend=F,size=0.5,color="darkgrey") + # NPIs
-  geom_text(data=npi_df[1:3,],aes(x=on+ifelse(name=="first",42,15),y=1e4,label=paste0(ifelse(name=="first","StringencyIndex=",""),
-      round(contact_reduction,2))),size=4)
+  scale_y_log10(expand=expansion(0,0),limits=c(0.6,1.5e4)) + labs(color="seed size",fill="seed size") + # color="IFR (%)",fill="IFR (%)"
+  geom_vline(data=npi_df,aes(xintercept=on),linetype="dashed",show.legend=F,size=0.5,color="darkgrey")  # NPIs
+  # geom_text(data=npi_df[1:3,],aes(x=on+ifelse(name=="first",42,15),y=1e4,label=paste0(ifelse(name=="first","StringencyIndex=",""),
+      # round(contact_reduction,2))),size=4)
 # SAVE
 ggsave(paste0(parscan_mcmc_dirname,"dynamics_cases_deaths_withdata.png"),width=30,height=20,units="cm")

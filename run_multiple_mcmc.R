@@ -61,9 +61,12 @@ fitting_params <- c("R0_fit","introd_date","npi_scale") # "seed_size","complianc
 pf <- function(parameters, x){x=as.list(x); n_groups=length(parameters$pop[[1]]$size)
 # R0
 target_R0=2; parameters$pop[[1]]$u=c(rep(0.0145,4),rep(0.0305,12))*(x$R0_fit/target_R0) #  # cm_calc_R0(params,1)
+# clinical fraction
+parameters$pop[[1]]$y=c(rep(0.25,6),seq(0.3,0.7,by=0.05),0.7)
 # seed size and introd date: continuous seeding or one-time event?
 seeding_t_window=round(x$introd_date):round(x$introd_date+round(n_seedsize/10))
 parameters$pop[[1]]$seed_times=rep(seeding_t_window,each=10) # x new infections/day for n days
+parameters$pop[[1]]$dist_seed_ages=cm_age_coefficients(30,70,5*(0:length(params$pop[[1]]$size)))
 # parameters$pop[[1]]$seed_times=rep(round(x$introd_date):round(x$introd_date),each=n_seedsize) # x$seed_size
 # IFR
 agegroupmeans=c(2.5+(0:14)*5,80.255) # slope_val<-0.0999 # as.numeric(linregr$coefficients["agegroup_mean"])
@@ -72,8 +75,8 @@ ifr_logit <- c(-10.414283,-11.512915,-11.512915,-10.414283,-9.721106,-8.947846,-
                -6.715924,-6.178135,-5.732038,-5.385862,-4.522041,-4.073073,-2.026972)
 # x$ifr_logit_intercept+slope_val*agegroupmeans
 parameters$processes<-list(cm_multinom_process("Ip",
-                                               outcomes=data.table(death=inv.logit(ifr_logit + ifr_logit_increm)/parameters$pop[[1]]$y),
-                                               delays=data.table(death=data.table(death=cm_delay_gamma(22,22,60,1/4)$p)),report="o"))
+                                outcomes=data.table(death=inv.logit(ifr_logit + ifr_logit_increm)/parameters$pop[[1]]$y),
+                                delays=data.table(death=data.table(death=cm_delay_gamma(22,22,60,1/4)$p)),report="o"))
 # compliance
 t_npi=list(first=c("2020-03-19","2020-06-30"),second=c("2020-07-01","2020-08-29"),
            third=c("2020-08-30","2020-10-08"),fourth=c("2020-10-09","2020-11-01")); npi_vals=c(0.455,0.736,0.593,0.624)
@@ -101,9 +104,9 @@ fitting_incidence <- data.table(out_bdr_daily_estimates %>% select(date,daily_ba
                                   mutate(daily_baseline_subtr=round(daily_baseline_subtr))) %>%
   filter(date>=fitting_date_window[1] & date<=fitting_date_window[2]) %>% rename(new_deaths=daily_baseline_subtr)
 # plot
-ggplot(fitting_incidence,aes(x=date,y=new_deaths)) + geom_line() + geom_point() +
-  theme_bw() + scale_x_date(date_breaks="2 days",expand=expansion(0,0)) + standard_theme +
-  theme(axis.text.x=element_text(vjust=0.5),legend.position="top") # + geom_vline(xintercept=as.Date("2020-04-13"),size=0.4)
+# ggplot(fitting_incidence,aes(x=date,y=new_deaths)) + geom_line() + geom_point() +
+#   theme_bw() + scale_x_date(date_breaks="2 days",expand=expansion(0,0)) + standard_theme +
+#   theme(axis.text.x=element_text(vjust=0.5),legend.position="top") # + geom_vline(xintercept=as.Date("2020-04-13"),size=0.4)
 # n_compliance,n_seedsize
 ### ### ### ### ### ### ### ###
 parscan_dirname=paste0("simul_output/somalia/scan_seedsize_ifr_",
@@ -118,8 +121,6 @@ scan_seed_vals=c(20,50,100,200,500)
 # select range of IFR values
 ifr_increm_vals=c(2.5) # c(0,1,2,2.5,3)
 fits_death_scaling=list(); fits_compliance=list()
-# fcn_somal_sir_singlesimul<-.GlobalEnv$fcn_somal_sir_singlesimul
-# df_output <- foreach(k=1:k_lim,.combine=rbind,.packages=c("tidyr","deSolve","dplyr","RcppRoll")) %dopar% { }
 for (n_seedsize in scan_seed_vals) {
   for (ifr_logit_increm in ifr_increm_vals) {
     for (k in 1:length(CDR_vals)) { # introd_date ifr_logit_intercept
@@ -135,9 +136,5 @@ for (n_seedsize in scan_seed_vals) {
         saveRDS(fits_death_scaling, paste0(parscan_dirname,"/fits_death_",paste0(fitting_date_window,collapse = "_"),
                                            "_ifr_increm",ifr_logit_increm,"_seedsize",n_seedsize,".rds") )}
     }
-    # fits_compliance[[which(scan_compliance_vals %in% n_compliance)]]=fits_death_scaling
   }
-  # fits_all[[which(scan_seed_vals %in% n_seedsize)]]=fits_compliance
 }
-# SAVE
-# saveRDS(fits_all,file=paste0("simul_output/somalia/fits_death_",paste0(fitting_date_window,collapse = "_"),".rds"))

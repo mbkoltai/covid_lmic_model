@@ -230,8 +230,8 @@ ggsave(paste0(parscan_mcmc_dirname,"all_dynamic_fits.png"),width=38,height=18,un
 fitting_params_best_estim = left_join(posteriors_summary_stats %>% # mutate(CDR=ifelse(CDR==0.042,round(CDR_vals[1],5),CDR)) %>% 
   # check start date of simul, rewrite if needed!!
   filter(name %in% c("npi_scale","R0_fit","introduction (days after 01/09/19)")) %>% 
-  select(name,seedsize,ifr_logit_increm,mean),DIC_logllk_values %>% select(!c(deviance,d_p)),by=c("seedsize","ifr_logit_increm")) %>%
-  pivot_wider(names_from=name,values_from=mean) %>% # rename(IFR=`IFR all infections (%)`) %>%
+  select(name,seedsize,ifr_logit_increm,median),DIC_logllk_values %>% select(!c(deviance,d_p)),by=c("seedsize","ifr_logit_increm")) %>%
+  pivot_wider(names_from=name,values_from=median) %>% # rename(IFR=`IFR all infections (%)`) %>%
   mutate(introd_date=as.Date(onefit$base_parameters$date0)+`introduction (days after 01/09/19)`) %>%
   mutate(ifr_all_inf=round(sapply(ifr_logit_increm,
                   function(x) 1e2*sum(inv.logit(IFR_estimates_Sandmann2021$logit_ifr+x)*somalia_agegroups_IFR$agegroup_perc) ),2))
@@ -275,13 +275,14 @@ ggplot(fitting_params_best_estim %>% filter(seedsize>20) %>% # ifr_all_inf<1.6 &
   scale_x_discrete(expand=expansion(0.1,0)) + # scale_y_log10() + # scale_y_continuous(breaks=seq(5,100,by=1)*100) + 
   theme_bw() + standard_theme + 
   theme(axis.text.x=element_text(vjust=0.5,hjust=0.95,size=17),axis.text.y=element_text(size=17),panel.grid.major.x=element_blank(),
-        legend.position="top",strip.text=element_text(size=15),axis.title=element_text(size=20)) +
+        legend.position="top",strip.text=element_text(size=15),axis.title=element_text(size=20),legend.text=element_text(size=15),
+        legend.title=element_text(size=17)) +
   # introd date
   geom_text(aes(x=factor(ifr_all_inf),y=DIC+label_y_dodge,group=seedsize,label=gsub("-","/",format(introd_date,"%d/%m/%y"))),
             position=position_dodge(width=1),size=fontsize) +
   # R0
   geom_text(aes(x=factor(ifr_all_inf),y=DIC+label_y_dodge+14,group=seedsize,label=R0_label),position=position_dodge(width=1),size=fontsize) + 
-  geom_text(aes(x=factor(ifr_all_inf),y=DIC-label_y_dodge,group=seedsize,label=paste0("NPI: ",round(npi_max_effect*100),"%")),
+  geom_text(aes(x=factor(ifr_all_inf),y=DIC-label_y_dodge,group=seedsize,label=paste0(round(npi_max_effect*100),"%")),
             position=position_dodge(width=1),size=fontsize) + xlab("IFR (%)") + ylab("DIC") + labs(color="seedsize",alpha="CDR")
 # SAVE
 ggsave(paste0(parscan_mcmc_dirname,"DIC_xaxis_NPIscaling_colorcode_seedsize_alpha_CDR.png"),width=40,height=24,units="cm")
@@ -298,8 +299,8 @@ df_summary_plot=left_join(posteriors_summary_stats %>% group_by(name) %>% mutate
 # paste0(round(DIC/10^floor(log10(DIC)),round_prec),"e",floor(log10(DIC)))
 ######
 # plot
-x_dodge_val=1; hpline_val=27
-p <- ggplot(df_summary_plot %>% filter(ifr_all_inf>0.15 & seedsize>20),aes(x=factor(ifr_all_inf),group=seedsize)) + # ifr_all_inf<1.6 & 
+x_dodge_val=1; hpline_val=22
+p <- ggplot(df_summary_plot %>% filter(seedsize>20),aes(x=factor(ifr_all_inf),group=seedsize)) + # ifr_all_inf<1.6 & 
   geom_linerange(aes(ymin=ci95_low,ymax=ci95_up,color=factor(seedsize)),position=position_dodge(width=x_dodge_val),alpha=0.3,
                  size=hpline_val,show.legend=FALSE) +
   geom_linerange(aes(ymin=ci50_low,ymax=ci50_up,color=factor(seedsize)),position=position_dodge(width=x_dodge_val),alpha=0.6,
@@ -310,7 +311,8 @@ p <- ggplot(df_summary_plot %>% filter(ifr_all_inf>0.15 & seedsize>20),aes(x=fac
   ylab("median (CI50, CI95)") + labs(color="seedsize",caption=paste0("Burn-in: ",onefit$options$mcmc_burn_in,", Samples: ",
               onefit$options$mcmc_samples," (MCMC)")) + scale_x_discrete(expand=expansion(0,0.5)) +
   theme(axis.text.x=element_text(vjust=0.5,hjust=0.95,size=15),axis.text.y=element_text(size=15),panel.grid.major.x=element_blank(),
-    legend.position="top",strip.text=element_text(size=15),legend.key.height=unit(0.8,'cm'),axis.title=element_text(size=20)) +
+    legend.position="top",strip.text=element_text(size=15),legend.key.height=unit(0.8,'cm'),axis.title=element_text(size=20),
+    legend.text=element_text(size=15),legend.title=element_text(size=17)) +
   guides(colour=guide_legend(override.aes=list(size=3))) + geom_text(aes(x=factor(ifr_all_inf),y=ifelse(!grepl("introd",name),NA,ci50_low-10),
         label=ifelse(!grepl("introd",name),"",introd_date_str )),size=4.5,position=position_dodge(width=x_dodge_val)); p
 # SAVE

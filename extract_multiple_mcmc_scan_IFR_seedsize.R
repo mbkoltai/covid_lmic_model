@@ -60,11 +60,6 @@ countryval="Somalia"; params=cm_parameters_SEI3R(gsub("Sudan|Somalia","Ethiopia"
 params$pop[[1]]$name=onefit$base_parameters$pop[[1]]$name
 params$pop[[1]]$size=onefit$base_parameters$pop[[1]]$size
 params$pop[[1]]$dist_seed_ages=onefit$base_parameters$pop[[1]]$dist_seed_ages
-# set clinical fraction values (from Davies 2020 -> "repo_data/suscept_clinfract_posteriors_davies2010.csv")
-# set approximated clin fract values
-# params$pop[[1]]$y=fun_lin_approx_agedep_par(agegroups=somalia_agegroups_IFR,min_val=0.25,max_val=0.7,rep_min=6,rep_max=2)
-# target_R0=2; params$pop[[1]]$u=c(rep(0.38,4),rep(0.8,12)) # susceptibility_warvick_model$value # 
-# params$pop[[1]]$u=params$pop[[1]]$u*(target_R0/cm_calc_R0(params,1))
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 # read in results of fitting
 scan_params<-c("seedsize","ifr_logit_increm","IFR all infections (%)")
@@ -149,6 +144,7 @@ DIC_logllk_values <- left_join(right_join(summ %>% filter(compartment=="death_o"
 # paste0(round(DIC/10^floor(log10(DIC)),2),"e",floor(log10(DIC)))
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### correlations between parameters
 for (k_seedsize in unique(df_posteriors_parscan$seedsize)) {
   for (k_ifr_logit in unique(df_posteriors_parscan$ifr_logit_increm)) {
@@ -211,7 +207,7 @@ for (k in 4:6){
   # SAVE
  ggsave(paste0(parscan_mcmc_dirname,"mcmc_diagnostics/logpost_",colnames(df_posteriors_parscan)[k],".png"),width=30,height=18,units="cm")
 }
-
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 # PLOT DYNAMIC fits faceted by (CDR -seedsize-NPI_scale)
@@ -271,15 +267,15 @@ ggsave(paste0(parscan_mcmc_dirname,"all_dynamic_fits_NPIcolorcode.png"),width=36
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 # PLOT DIC as function of CDR~seedsize~ifr NPI_scale
 label_y_dodge=12; label_y_factor=1.03; fontsize=4.5
-ggplot(fitting_params_best_estim %>% filter(ifr_all_inf<1.6 & seedsize>20) %>% 
+ggplot(fitting_params_best_estim %>% filter(seedsize>20) %>% # ifr_all_inf<1.6 & 
          mutate(R0_label=paste0("R0=",round(R0_fit,1)),npi_max_effect=npi_scale*max(npi_df$contact_reduction)) ) + 
   geom_hpline(aes(x=factor(ifr_all_inf),y=DIC,group=seedsize,color=factor(seedsize)),width=0.24, # group=CDR,alpha=factor(CDR)
               position=position_dodge(width=1)) + scale_alpha_manual(values=c(0.4,0.55,0.7,0.85)) + 
-  geom_vline(xintercept=(2:4)-0.5,size=0.2,linetype="dashed") + # facet_wrap(~seedsize,labeller=labeller(CDR=label_both),nrow = 3) +
+  geom_vline(xintercept=(1:4)+0.5,size=0.2,linetype="dashed") + # facet_wrap(~seedsize,labeller=labeller(CDR=label_both),nrow = 3) +
   scale_x_discrete(expand=expansion(0.1,0)) + # scale_y_log10() + # scale_y_continuous(breaks=seq(5,100,by=1)*100) + 
   theme_bw() + standard_theme + 
-  theme(axis.text.x=element_text(vjust=0.5,hjust=0.95,size=12),axis.text.y=element_text(size=12),panel.grid.major.x=element_blank(),
-        legend.position="top",strip.text=element_text(size=15)) +
+  theme(axis.text.x=element_text(vjust=0.5,hjust=0.95,size=17),axis.text.y=element_text(size=17),panel.grid.major.x=element_blank(),
+        legend.position="top",strip.text=element_text(size=15),axis.title=element_text(size=20)) +
   # introd date
   geom_text(aes(x=factor(ifr_all_inf),y=DIC+label_y_dodge,group=seedsize,label=gsub("-","/",format(introd_date,"%d/%m/%y"))),
             position=position_dodge(width=1),size=fontsize) +
@@ -287,7 +283,6 @@ ggplot(fitting_params_best_estim %>% filter(ifr_all_inf<1.6 & seedsize>20) %>%
   geom_text(aes(x=factor(ifr_all_inf),y=DIC+label_y_dodge+14,group=seedsize,label=R0_label),position=position_dodge(width=1),size=fontsize) + 
   geom_text(aes(x=factor(ifr_all_inf),y=DIC-label_y_dodge,group=seedsize,label=paste0("NPI: ",round(npi_max_effect*100),"%")),
             position=position_dodge(width=1),size=fontsize) + xlab("IFR (%)") + ylab("DIC") + labs(color="seedsize",alpha="CDR")
-# caption="Introd. date not shown when equal to 2019-11-11"
 # SAVE
 ggsave(paste0(parscan_mcmc_dirname,"DIC_xaxis_NPIscaling_colorcode_seedsize_alpha_CDR.png"),width=40,height=24,units="cm")
 
@@ -304,26 +299,23 @@ df_summary_plot=left_join(posteriors_summary_stats %>% group_by(name) %>% mutate
 ######
 # plot
 x_dodge_val=1; hpline_val=27
-p <- ggplot(df_summary_plot %>% filter(ifr_all_inf<1.6 & seedsize>20),aes(x=factor(ifr_all_inf),group=seedsize)) + #  
+p <- ggplot(df_summary_plot %>% filter(ifr_all_inf>0.15 & seedsize>20),aes(x=factor(ifr_all_inf),group=seedsize)) + # ifr_all_inf<1.6 & 
   geom_linerange(aes(ymin=ci95_low,ymax=ci95_up,color=factor(seedsize)),position=position_dodge(width=x_dodge_val),alpha=0.3,
                  size=hpline_val,show.legend=FALSE) +
   geom_linerange(aes(ymin=ci50_low,ymax=ci50_up,color=factor(seedsize)),position=position_dodge(width=x_dodge_val),alpha=0.6,
                  size=hpline_val) + # ,show.legend=FALSE
   geom_hpline(aes(y=median),color="black",position=position_dodge(width=x_dodge_val),width=0.23,size=0.6) + # factor(seedsize)
   facet_wrap(~name,scales="free",labeller=labeller(ifr_all_inf=label_both),nrow=3) + # ~NPI_scale
-  geom_vline(xintercept=0.5+1:3,size=0.2,linetype="dashed") + theme_bw() + standard_theme + xlab("IFR (%)") + 
+  geom_vline(xintercept=0.5+(1:4),size=0.2,linetype="dashed") + theme_bw() + standard_theme + xlab("IFR (%)") + 
   ylab("median (CI50, CI95)") + labs(color="seedsize",caption=paste0("Burn-in: ",onefit$options$mcmc_burn_in,", Samples: ",
               onefit$options$mcmc_samples," (MCMC)")) + scale_x_discrete(expand=expansion(0,0.5)) +
-  theme(axis.text.x=element_text(vjust=0.5,hjust=0.95,size=12),axis.text.y=element_text(size=12),panel.grid.major.x=element_blank(),
-        legend.position="top",strip.text=element_text(size=15),legend.key.height=unit(0.8,'cm')) + # 
-  guides(colour = guide_legend(override.aes=list(size=3))) +
-  geom_text(aes(x=factor(ifr_all_inf),y=ifelse(!grepl("introd",name),NA,ci50_up+10),label=ifelse(!grepl("introd",name),"",
-                paste0("DIC=",DIC_str))),size=4.5,position=position_dodge(width=x_dodge_val)) +
-  geom_text(aes(x=factor(ifr_all_inf),y=ifelse(!grepl("introd",name),NA,ci50_low-10),
+  theme(axis.text.x=element_text(vjust=0.5,hjust=0.95,size=15),axis.text.y=element_text(size=15),panel.grid.major.x=element_blank(),
+    legend.position="top",strip.text=element_text(size=15),legend.key.height=unit(0.8,'cm'),axis.title=element_text(size=20)) +
+  guides(colour=guide_legend(override.aes=list(size=3))) + geom_text(aes(x=factor(ifr_all_inf),y=ifelse(!grepl("introd",name),NA,ci50_low-10),
         label=ifelse(!grepl("introd",name),"",introd_date_str )),size=4.5,position=position_dodge(width=x_dodge_val)); p
 # SAVE
 ggsave(paste0(parscan_mcmc_dirname,"posteriors_mean_CIs_facet",ifelse(grepl("Wrap",class(p$facet)[1]),"wrap","grid"),
-              "_name_NPIscale_colorcode_seedsize",".png"),width=36,height=30,units="cm")
+              "_name_NPIscale_colorcode_seedsize.png"),width=36,height=30,units="cm")
 ### ### ### ### ###
 # plot attack rates
 p <- ggplot(summ %>% filter(compartment=="attack_rate")) + 
@@ -337,7 +329,7 @@ p <- ggplot(summ %>% filter(compartment=="attack_rate")) +
 # SAVE
 att_rate_filename<-paste0(parscan_mcmc_dirname,"dynamics_cumulattackrate_deaths_CDRscan.png")
 if (length(p$facet$params$facets)>0) {att_rate_filename <- gsub(".png","_faceted.png",att_rate_filename)}
-ggsave(att_rate_filename,width=22,height=16,units="cm")
+ggsave(att_rate_filename,width=26,height=16,units="cm")
 
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 # case dynamics
@@ -359,6 +351,7 @@ ggplot(left_join(summ %>% filter(compartment %in% c("cases","death_o") & date<as
 # SAVE
 ggsave(paste0(parscan_mcmc_dirname,"dynamics_cases_deaths_withdata.png"),width=30,height=20,units="cm")
 
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 # single seedsize dynamics plot
 y_text=16; x_dodge_text=2; y_low=7; x_dodge_vals=c(5,24); x_start=as.Date("2020-01-10"); y_stepsize=1.1; lab_fontsize=4.5
 seedsize_sel=200

@@ -83,14 +83,15 @@ df_compare_report_satell=bind_rows(weekly_deaths_reported,
   summarise(date=min(date),datasource=unique(datasource),name=unique(name),value=sum(value)) %>% mutate(week=gsub("/","/w",week))
 # plot # library(ungeviz)
 p <- ggplot(subset(df_compare_report_satell,date>"2020-01-15" & date<"2020-10-07"),aes(x=week,y=value,group=datasource)) + 
-  # geom_hpline(aes(x=week,y=value,group=datasource,color=datasource),width=0.9) + # 
-  # geom_vline(xintercept=(1:length(unique(df_compare_report_satell$week)))-0.5,size=0.1,linetype="dashed") + 
-  geom_bar(aes(fill=datasource),stat="identity",position=position_dodge(width=0.75),color="black",size=0.2) + 
+  geom_hpline(aes(x=week,y=value,group=datasource,color=datasource),width=0.9) + # 
+  geom_vline(xintercept=(1:length(unique(df_compare_report_satell$week)))-0.5,size=0.1,linetype="dashed") + 
+  # geom_bar(aes(fill=datasource),stat="identity",position=position_dodge(width=0.75),color="black",size=0.2) + 
   scale_fill_discrete(labels=c("reported COVID19 deaths","excess burials")) + 
   scale_color_discrete(labels=c("reported COVID19 deaths","excess burials"))+labs(fill="",color="") + theme_bw() + standard_theme +
-  theme(axis.text.x=element_text(vjust=0.5),legend.position=c(0.8,0.9),legend.margin=margin(0,0,0,0),legend.text=element_text(size=14))+
+  theme(axis.text.x=element_text(vjust=0.5),legend.position=c(0.855,0.925),legend.text=element_text(size=15),
+        legend.box.background=element_rect(colour="black",size=0.8),legend.background=element_blank(),legend.spacing.y=unit(0,"mm"),
+        axis.text.x.bottom=element_text(size=12),axis.text.y=element_text(size=12)) + # legend.margin=margin(0,0,0,0),
   scale_y_continuous(expand=expansion(0.01,0),breaks=(0:20)*5) + xlab("year/week") + ylab("number per week"); p
-# legend.spacing.x = unit(0, "mm"),legend.spacing.y = unit(0, "mm")
 # SAVE
 if (any(grepl("Bar",class(p$layers[[1]]$geom)))) {plotfilename<-"satellite_burials_reported_deaths_weekly_barplot"} else {
   plotfilename<-"satellite_burials_reported_deaths_weekly" }

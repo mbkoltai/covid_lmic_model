@@ -74,9 +74,10 @@ agegroupmeans=c(2.5+(0:14)*5,80.255) # slope_val<-0.0999 # as.numeric(linregr$co
 ifr_logit <- c(-10.414283,-11.512915,-11.512915,-10.414283,-9.721106,-8.947846,-8.334632,-7.823646,-7.194687,
                -6.715924,-6.178135,-5.732038,-5.385862,-4.522041,-4.073073,-2.026972)
 # x$ifr_logit_intercept+slope_val*agegroupmeans
+time_inf_to_death<-15
 parameters$processes<-list(cm_multinom_process("Ip",
-                                outcomes=data.table(death=inv.logit(ifr_logit + ifr_logit_increm)/parameters$pop[[1]]$y),
-                                delays=data.table(death=data.table(death=cm_delay_gamma(22,22,60,1/4)$p)),report="o"))
+                        outcomes=data.table(death=inv.logit(ifr_logit + ifr_logit_increm)/parameters$pop[[1]]$y),
+                        delays=data.table(death=data.table(death=cm_delay_gamma(time_inf_to_death,time_inf_to_death,60,1/4)$p)),report="o"))
 # compliance
 t_npi=list(first=c("2020-03-19","2020-06-30"),second=c("2020-07-01","2020-08-29"),
            third=c("2020-08-30","2020-10-08"),fourth=c("2020-10-09","2020-11-01")); npi_vals=c(0.455,0.736,0.593,0.624)
@@ -86,7 +87,7 @@ for (k in 1:length(npi_vals)) { if (k==1) {iv=cm_iv_build(parameters)}
 return (parameters) 
 }
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-# calculating posterior likelihood by a Poisson
+# calculating posterior likelihood with Poisson distribution
 likelihood = function(parameters, dynamics, data, x){
   inc = data; inc[, t := as.numeric(date - ymd(parameters$date0))]
   # simulations output scaled!!!
@@ -98,7 +99,7 @@ likelihood = function(parameters, dynamics, data, x){
 priors=list(R0_fit="N 3 1 T 1 5", introd_date="N 182 20",npi_scale="U 0 1")
 ### ### ### ### ### ### ### ###
 # PERIOD we are fitting
-fitting_date_window=as.Date(c("2020-02-23","2020-08-24")) # c("2020-01-15","2020-04-13") # c("2020-01-15","2020-10-01")
+fitting_date_window=as.Date(c("2020-03-02","2020-08-02")) # c("2020-01-15","2020-04-13") # c("2020-01-15","2020-10-01")
 # select fitting data
 fitting_incidence <- data.table(out_bdr_daily_estimates %>% select(date,daily_baseline_subtr) %>% 
                                   mutate(daily_baseline_subtr=round(daily_baseline_subtr))) %>%
@@ -117,9 +118,9 @@ CDR_vals=c(1e4*baseline_daily_burials/mogadishu_popul,0.1,0.2,0.4)[1]
 # start date for simulations
 params$date0="2019-09-01"
 # select range of seed sizes
-scan_seed_vals=c(20,50,100,200,500)
+scan_seed_vals=c(20,50,100)
 # select range of IFR values
-ifr_increm_vals=c(2.5) # c(0,1,2,2.5,3)
+ifr_increm_vals=c(0,1,2,2.5,3)
 fits_death_scaling=list(); fits_compliance=list()
 for (n_seedsize in scan_seed_vals) {
   for (ifr_logit_increm in ifr_increm_vals) {

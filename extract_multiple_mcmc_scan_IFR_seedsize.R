@@ -7,7 +7,7 @@ lapply(c("tidyverse","deSolve","qs","gtools","rstudioapi","wpp2019","countrycode
 source("somalia_data_model_fcns.R")
 # load folder (change to "repo_data" or own folder)
 parscan_mcmc_dirname=
-  "simul_output/somalia/3param_fits_seedsize_IFR_fixed/scan_seedsize_ifr_introddate_N_182_20_fitperiod_20200302_20200802_IFR4vals_no_1.5/"
+  "simul_output/somalia/3param_fits_seedsize_IFR_fixed/scan_seedsize_ifr_introddate_N_182_20_fitperiod_20200302_20200802_large_seed_only/"
 parfit_scan_files<-list.files(parscan_mcmc_dirname,pattern = ".rds"); # slope_val=round(as.numeric(linregr$coefficients[2]),4)
 # need to have IFR estimates from Sandmann: IFR_estimates_Sandmann2021$logit_ifr
 # how many CDR values were used?
@@ -200,8 +200,8 @@ for (k in 4:6){
              scales="free") + # ,nrow=length(unique(df_posteriors_parscan$ifr_logit_increm))
   theme_bw() + standard_theme + labs(color="log-posterior",fill="log-posterior") + xlab(colnames(df_posteriors_parscan)[k]) +
   ylab("log-posterior"); p
-  # SAVE
- ggsave(paste0(parscan_mcmc_dirname,"mcmc_diagnostics/logpost_",colnames(df_posteriors_parscan)[k],".png"),width=30,height=18,units="cm") }
+# SAVE
+ggsave(paste0(parscan_mcmc_dirname,"mcmc_diagnostics/logpost_",colnames(df_posteriors_parscan)[k],".png"),width=30,height=18,units="cm") }
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###
 # PLOT DYNAMIC fits faceted by (CDR -seedsize-NPI_scale)
@@ -237,16 +237,16 @@ fitting_params_best_estim = left_join(posteriors_summary_stats %>% # mutate(CDR=
 # contact_red=round(max(npi_df$contact_reduction)*NPI_scale,2)
 
 # dynamic fits faceted by (CDR-seedsize), NPI_scale by color
-y_text=14; x_dodge_text_offset=3; x_dodge_vals=c(13,27)+c(5.5,9); y_low=7.5; txt_s=4.5
+y_text=14; x_dodge_text_offset=3; x_dodge_vals=c(12,27); y_low=7.5; txt_s=5
 ggplot(summ %>% filter(compartment=="death_o") ) + geom_line(aes(x=date,y=mean,color=factor(round(ifr_all_inf,2)))) +
   geom_ribbon(aes(x=date,ymin=lower,ymax=upper,fill=factor(round(ifr_all_inf,2))),alpha=0.2) + # alpha=factor(CDR)
   geom_line(data=fitting_incidence_modelcompare %>% mutate(t=as.numeric(date)),aes(x=date,y=new_deaths),linetype="dashed",size=0.3) +
   geom_point(data=fitting_incidence_modelcompare %>% mutate(t=as.numeric(date)),aes(x=date,y=new_deaths),fill=NA,shape=1,size=0.2) +
   facet_wrap(~seedsize,labeller=labeller(seedsize=label_both),scales="free",nrow=2) + # CDR~seedsize
   scale_alpha_manual(values=c(0.4,0.45,0.5,0.55)) + xlab("") + ylab("deaths (daily)") + standard_theme + theme_bw() +
-  theme(axis.text.x=element_text(vjust=0.5,angle=90,size=14),axis.text.y=element_text(size=14),axis.title.y=element_text(size=18),
-    panel.grid.minor=element_blank(),legend.position="top",strip.text=element_text(size=14),legend.text=element_text(size=14),
-    legend.title=element_text(size=16)) +
+  theme(axis.text.x=element_text(vjust=0.5,angle=90,size=17),axis.text.y=element_text(size=17),axis.title.y=element_text(size=22),
+    panel.grid.minor=element_blank(),legend.position="top",strip.text=element_text(size=20),legend.text=element_text(size=19),
+    legend.title=element_text(size=20)) +
   # DIC labels
   geom_text(data=DIC_logllk_values,aes(x=as.Date("2020-01-15") + x_dodge_text_offset-3,y=as.numeric(factor(ifr_logit_increm))*1.4+y_text,
                                        label="DIC=",color=factor(ifr_all_inf)),size=txt_s,show.legend=FALSE) + # DIC values

@@ -13,7 +13,7 @@
 #' Load libraries, functions
 rm(list=ls()); currentdir_path=dirname(rstudioapi::getSourceEditorContext()$path); setwd(currentdir_path)
 lapply(c("tidyverse","deSolve","qs","gtools","rstudioapi","wpp2019","countrycode","coronavirus","wesanderson","dttr2","RcppRoll",
-         "scales","wpp2019","GGally","corrr","ungeviz"), library,character.only=TRUE)
+         "scales","GGally","corrr","ungeviz"), library,character.only=TRUE)
 # detach("package:fitdistrplus", unload = TRUE); detach("package:MASS", unload = TRUE) # "foreach","parallel","doParallel"
 # functions and plotting theme
 source("somalia_data_model_fcns.R")
@@ -136,7 +136,7 @@ ggplot(OxCGRT_input) + geom_line(aes(x=date,y=1-OxCGRT_scaled)) + geom_segment(d
 
 ### Somalia population, IFR ------------
 # IFR estimates from Imperial
-somalia_agegroups_IFR<-fcn_merge_ifr_above_age(left_join(fcn_load_age_str("Somalia",n_year="2015",90),
+somalia_agegroups_IFR<-fcn_merge_ifr_above_age(left_join(fcn_load_age_str("Somalia",n_year="2015",cutoff_age=90),
   fcn_load_ifr("repo_data/IFR_by_age_imperial.csv"),by=c("agegroup","agegroup_min")),75) %>% 
   mutate(ifr_mean=ifelse(ifr_mean==0,min(ifr_mean[ifr_mean>0]),ifr_mean),log_ifr=log(ifr_mean),logit_ifr=log(ifr_mean/(1-ifr_mean)))
 somal_popul_tot=sum(somalia_agegroups_IFR$agegroupsize); mogadishu_popul=2.2e6 # somalia_agegroups_IFR$ifr_mean[1]=3e-6; 

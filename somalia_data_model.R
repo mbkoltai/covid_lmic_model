@@ -115,7 +115,8 @@ ggsave(paste0("simul_output/somalia/",plotfilename,".png"),units="cm",height=18,
 # Oxford Stringency Index
 # truncate until a given timepoint
 OxCGRT_url="https://raw.githubusercontent.com/OxCGRT/covid-policy-tracker/master/data/OxCGRT_latest.csv"
-OxCGRT_input=fcn_get_OxCGRT(OxCGRT_url,"Somalia") %>% mutate(OxCGRT_scaled_smoothed=roll_mean(OxCGRT_scaled,30,align="center",fill=NA))
+OxCGRT_input=fcn_get_OxCGRT(OxCGRT_url,"Somalia") %>% 
+  mutate(OxCGRT_scaled_smoothed=roll_mean(OxCGRT_scaled,30,align="center",fill=NA))
 # separate into 4 phases
 NPI_phases=list(first=c("2020-03-19","2020-06-30"),second=c("2020-07-01","2020-08-29"),
                 third=c("2020-08-30","2020-10-08"),fourth=c("2020-10-09","2020-11-01"))
@@ -242,13 +243,14 @@ ggplot(subset(covidm_simul,!dynam_type %in% "preval")) + geom_area(aes(x=date,y=
 plot_sum_t_series <- left_join(run$dynamics,IFR_estimates_Sandmann2021 %>% mutate(ifr_sympt=params$processes[[1]]$prob[1,]) %>% 
                                  rename(group=agegroup) %>% select(group,ifr_mean,ifr_sympt),by="group") %>% 
   filter(compartment %in% c("E","Is","cases","death_o")) %>% group_by(group,compartment) %>% #"Is" & t<200 & t>=max(seeding_t_window)-2
-  mutate(deaths_calc_lag15d_cases=ifelse(compartment %in% "cases",lag(value,order_by=t,n=15)*ifr_sympt,NA),date=t+as.Date(params$date0)) %>%
-  group_by(compartment,date,t) %>% summarise(value=sum(value),deaths_calc_lag15d_cases=sum(deaths_calc_lag15d_cases)) %>% ungroup() 
+  mutate(deaths_calc_lag15d_cases=ifelse(compartment %in% "cases",lag(value,order_by=t,n=15)*ifr_sympt,NA),
+         date=t+as.Date(params$date0)) %>% group_by(compartment,date,t) %>% 
+  summarise(value=sum(value),deaths_calc_lag15d_cases=sum(deaths_calc_lag15d_cases)) %>% ungroup() 
 plot_sum_t_series <- bind_rows(plot_sum_t_series %>% select(compartment,date,t,value),plot_sum_t_series %>% 
-                                 select(compartment,date,t,deaths_calc_lag15d_cases) %>% 
-            rename(value=deaths_calc_lag15d_cases) %>% mutate(compartment="deaths_calc_lag15d_cases") %>% filter(!is.na(value) )) %>%
+             select(compartment,date,t,deaths_calc_lag15d_cases) %>% 
+    rename(value=deaths_calc_lag15d_cases) %>% mutate(compartment="deaths_calc_lag15d_cases") %>% filter(!is.na(value) )) %>%
   mutate(compartment=ifelse(compartment=="death_o","deaths (simulated)",
-                            ifelse(compartment %in% "deaths_calc_lag15d_cases","deaths (% of 15-day lagged presympt. cases)",compartment)))
+        ifelse(compartment %in% "deaths_calc_lag15d_cases","deaths (% of 15-day lagged presympt. cases)",compartment)))
 # AGEGROUPS summed
 sel_case_date<-plot_sum_t_series %>% filter(compartment=="cases") %>% 
                   filter(date==min(date[value>2^9]) | date==min(date[value>8]) | date==min(date[value>16]) ) # )$date
